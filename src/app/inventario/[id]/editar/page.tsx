@@ -8,6 +8,7 @@ import { getProducto, productoExiste, updateProducto } from "@/lib/inventario/st
 import type { MetodoValuacion } from "@/lib/inventario/types";
 import ProductImageUploader from "@/components/inventario/ProductImageUploader";
 import CompatibilidadVehicularEditor from "@/components/inventario/CompatibilidadVehicularEditor";
+import QuickNuevoProveedorModal from "@/components/proveedores/QuickNuevoProveedorModal";
 import SelectFromList from "@/components/inventario/SelectFromList";
 import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
@@ -79,6 +80,7 @@ export default function EditarProductoPage() {
   const [categorias, setCategorias] = useState<CatRow[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbiRow[]>([]);
   const [proveedores, setProveedores] = useState<ProvRow[]>([]);
+  const [nuevoProveedorOpen, setNuevoProveedorOpen] = useState(false);
 
   // Clasificación gastronómica
   const [esVendible, setEsVendible] = useState(true);
@@ -715,12 +717,13 @@ export default function EditarProductoPage() {
                   <span className="text-xs text-gray-400 truncate">
                     {proveedores.length === 0 ? "Todavía no cargaste proveedores." : `${proveedores.length} disponibles`}
                   </span>
-                  <Link
-                    href="/proveedores/nuevo"
+                  <button
+                    type="button"
+                    onClick={() => setNuevoProveedorOpen(true)}
                     className="shrink-0 inline-flex items-center gap-1 text-xs font-medium text-sky-700 hover:text-sky-900 border border-sky-200 hover:bg-sky-50 px-2.5 py-1 rounded-md transition-colors"
                   >
                     + Crear
-                  </Link>
+                  </button>
                 </div>
               </div>
               {/* Ubicación principal — oculta en instancia En lo de Mari (no aplica para gastronomía). */}
@@ -1088,6 +1091,20 @@ export default function EditarProductoPage() {
       </div>
 
       {id && <ProveedoresCostos productoId={id} />}
+
+      {/* Modal: crear proveedor sin perder el contexto del editor. */}
+      <QuickNuevoProveedorModal
+        open={nuevoProveedorOpen}
+        onClose={() => setNuevoProveedorOpen(false)}
+        onCreated={(p) => {
+          setProveedores((prev) => {
+            const map = new Map(prev.map((r) => [r.id, r]));
+            map.set(p.id, { id: p.id, nombre: p.nombre });
+            return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
+          });
+          setProveedorId(p.id);
+        }}
+      />
     </div>
   );
 }
