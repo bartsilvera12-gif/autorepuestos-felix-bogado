@@ -26,6 +26,10 @@ export interface ProductoPickerItem {
   controla_stock?: boolean;
   /** Modo de receta: 'produccion_previa' (Menú stockeado) muestra stock real. */
   modo_receta?: string;
+  // Autopartes (Fase 1/3) — opcionales.
+  codigo_oem?: string | null;
+  codigo_alternativo?: string | null;
+  marca_repuesto?: string | null;
 }
 
 /** Un Menú con produccion_previa maneja stock real del terminado (como reventa para mostrar). */
@@ -88,6 +92,8 @@ export default function ProductPickerModal({
   open, onClose, onAgregar, excludeIds = [], moneda = "GS", tipoCambio = 1, ivaDefault = "EXENTA",
 }: Props) {
   const [q, setQ] = useState("");
+  /** Filtro opcional por vehículo compatible (marca o modelo). */
+  const [vehiculoFiltro, setVehiculoFiltro] = useState("");
   const [items, setItems] = useState<ProductoPickerItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -115,7 +121,7 @@ export default function ProductPickerModal({
     setFeedback(null);
   }
 
-  useEffect(() => { if (open) { setQ(""); setError(null); setSel(null); setTimeout(() => inputRef.current?.focus(), 50); } }, [open]);
+  useEffect(() => { if (open) { setQ(""); setVehiculoFiltro(""); setError(null); setSel(null); setTimeout(() => inputRef.current?.focus(), 50); } }, [open]);
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -132,6 +138,7 @@ export default function ProductPickerModal({
       try {
         const url = new URL("/api/productos/search", window.location.origin);
         if (q.trim().length >= 2) url.searchParams.set("q", q.trim());
+        if (vehiculoFiltro.trim().length >= 2) url.searchParams.set("vehiculo", vehiculoFiltro.trim());
         url.searchParams.set("limit", "50");
         const res = await fetch(url.toString(), { credentials: "include" });
         const json = await res.json();
@@ -147,7 +154,7 @@ export default function ProductPickerModal({
       } finally { setLoading(false); }
     }, 200);
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
-  }, [q, open]);
+  }, [q, vehiculoFiltro, open]);
 
   function selectProducto(p: ProductoPickerItem) {
     setSel(p);
@@ -204,7 +211,7 @@ export default function ProductPickerModal({
               type="text"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Buscar por nombre, SKU, código, categoría o ubicación..."
+              placeholder="Buscar por nombre, SKU, código de barras, OEM, alternativo o marca..."
               className="flex-1 bg-transparent outline-none text-base text-slate-800 placeholder:text-slate-400"
               autoComplete="off"
             />
@@ -214,8 +221,28 @@ export default function ProductPickerModal({
               </svg>
             </button>
           </div>
+          {/* Filtro adicional por vehículo compatible (rubro autopartes). */}
+          <div className="mt-2 flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-4 h-4 text-slate-400 shrink-0"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg>
+            <input
+              type="text"
+              value={vehiculoFiltro}
+              onChange={(e) => setVehiculoFiltro(e.target.value)}
+              placeholder="Filtrar por vehículo compatible (marca o modelo)…"
+              className="flex-1 bg-transparent outline-none text-sm text-slate-700 placeholder:text-slate-400"
+              autoComplete="off"
+            />
+            {vehiculoFiltro && (
+              <button
+                type="button"
+                onClick={() => setVehiculoFiltro("")}
+                className="text-[11px] text-slate-400 hover:text-slate-700"
+                title="Quitar filtro"
+              >limpiar</button>
+            )}
+          </div>
           <p className="mt-2 text-xs text-slate-400">
-            Tokens en cualquier orden. Mínimo 2 letras por palabra. Esc para cerrar.
+            Buscá por código OEM/alternativo/marca o filtrá por vehículo. Mínimo 2 letras.
           </p>
         </div>
 
@@ -267,10 +294,17 @@ export default function ProductPickerModal({
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-slate-800 truncate">{p.nombre}</div>
+                        <div className="font-medium text-slate-800 truncate">
+                          {p.nombre}
+                          {p.marca_repuesto && (
+                            <span className="ml-2 inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">{p.marca_repuesto}</span>
+                          )}
+                        </div>
                         <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-500 flex-wrap">
                           <span className="font-mono">{p.sku}</span>
                           {p.codigo_barras && <span className="font-mono">· {p.codigo_barras}</span>}
+                          {p.codigo_oem && <span className="font-mono text-[#3F8E91]" title="Código OEM">· OEM {p.codigo_oem}</span>}
+                          {p.codigo_alternativo && <span className="font-mono text-slate-400" title="Código alternativo">· Alt {p.codigo_alternativo}</span>}
                           {p.categoria_nombre && <span>· {p.categoria_nombre}</span>}
                           {p.ubicacion_nombre && <span>· {p.ubicacion_nombre}</span>}
                         </div>
