@@ -31,8 +31,11 @@ export default function CobranzasResumenCards() {
     return () => { cancel = true; };
   }, []);
 
+  // No renderizar hasta tener la respuesta — evita el flicker de mostrar
+  // las tarjetas con Gs. 0 y luego ocultarlas cuando llega el fetch vacío.
+  if (!loaded) return null;
   // Si no hay nada por cobrar, no ocupar espacio.
-  if (loaded && (!r || (r.total_pendiente === 0 && r.cobrado_mes === 0))) return null;
+  if (!r || (r.total_pendiente === 0 && r.cobrado_mes === 0)) return null;
 
   const cards = [
     { l: "Pendiente por cobrar", v: fmtGs(r?.total_pendiente ?? 0), cls: "border-amber-200 bg-amber-50 text-amber-700" },
