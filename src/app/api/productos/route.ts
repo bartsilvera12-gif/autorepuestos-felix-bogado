@@ -63,12 +63,16 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    // PostgREST por default trunca a 1000 filas. Subimos el cap a 20.000
+    // para cubrir catálogos grandes (Felix Bogado tiene ~6k SKUs). Si en el
+    // futuro se pasa de 20k, conviene paginar server-side.
     const { data, error } = await ctx.supabase
       .from("productos")
       .select(PRODUCTO_COLS)
       .eq("empresa_id", ctx.auth.empresa_id)
       .eq("activo", true)
-      .order("nombre");
+      .order("nombre")
+      .limit(20000);
     if (error) throw new Error(error.message);
     const rows = ((data ?? []) as unknown as Record<string, unknown>[]).map(rowToApi);
     return NextResponse.json(successResponse({ productos: rows }));
