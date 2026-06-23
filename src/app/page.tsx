@@ -7,6 +7,7 @@ import { motion } from "framer-motion";
 // que vive en este mismo archivo queda intacto.
 import MobileDashboard from "@/app/_components/MobileDashboard";
 import CobranzasResumenCards from "@/components/cobros/CobranzasResumenCards";
+import StockMuertoCard from "@/components/dashboard/StockMuertoCard";
 import { getConfig } from "@/lib/config/storage";
 import { getUsuarios } from "@/lib/usuarios/storage";
 import type { ConfigGlobal } from "@/lib/config/types";
@@ -1618,6 +1619,10 @@ const DashInventario = memo(function DashInventario({
           variation={bajosStock > 0 ? -2 : undefined} />
         <KpiCard label="Valor del inventario"   value={`Gs. ${formatGsFull(valorTotal)}`} variation={12} />
       </div>
+
+      {/* Stock muerto — auto-fetch desde /api/reportes/sin-movimiento. Si no hay
+          productos sin movimiento, no se renderiza nada (cero clutter). */}
+      <StockMuertoCard dias={90} />
 
       {/* Donut + Críticos */}
       <div className="grid grid-cols-3 gap-4">
