@@ -11,7 +11,10 @@ const PRODUCTO_COLS =
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "es_vendible, es_insumo, controla_stock, valorizado, unidad_compra, unidad_receta, " +
-  "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta";
+  "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
+  // Autopartes (Fase 1)
+  "codigo_oem, codigo_alternativo, marca_repuesto, garantia_meses, permitir_venta_sin_stock, " +
+  "ubicacion_deposito, ubicacion_pasillo, ubicacion_estante, ubicacion_caja";
 
 function toNumber(v: unknown): unknown {
   return typeof v === "string" ? Number(v) : v;
@@ -160,6 +163,43 @@ export async function PATCH(
     if (body.modo_receta !== undefined) {
       const mr = body.modo_receta;
       patch.modo_receta = mr === "produccion_previa" ? "produccion_previa" : "preparado_al_vender";
+    }
+
+    // Autopartes — Fase 1 (todos opcionales; "" trim a null)
+    if (body.codigo_oem !== undefined) {
+      const v = body.codigo_oem == null ? "" : String(body.codigo_oem).trim();
+      patch.codigo_oem = v || null;
+    }
+    if (body.codigo_alternativo !== undefined) {
+      const v = body.codigo_alternativo == null ? "" : String(body.codigo_alternativo).trim();
+      patch.codigo_alternativo = v || null;
+    }
+    if (body.marca_repuesto !== undefined) {
+      const v = body.marca_repuesto == null ? "" : String(body.marca_repuesto).trim();
+      patch.marca_repuesto = v || null;
+    }
+    if (body.garantia_meses !== undefined) {
+      const n = body.garantia_meses == null ? null : Number(body.garantia_meses);
+      patch.garantia_meses = typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.floor(n) : null;
+    }
+    if (typeof body.permitir_venta_sin_stock === "boolean") {
+      patch.permitir_venta_sin_stock = body.permitir_venta_sin_stock;
+    }
+    if (body.ubicacion_deposito !== undefined) {
+      const v = body.ubicacion_deposito == null ? "" : String(body.ubicacion_deposito).trim();
+      patch.ubicacion_deposito = v || null;
+    }
+    if (body.ubicacion_pasillo !== undefined) {
+      const v = body.ubicacion_pasillo == null ? "" : String(body.ubicacion_pasillo).trim();
+      patch.ubicacion_pasillo = v || null;
+    }
+    if (body.ubicacion_estante !== undefined) {
+      const v = body.ubicacion_estante == null ? "" : String(body.ubicacion_estante).trim();
+      patch.ubicacion_estante = v || null;
+    }
+    if (body.ubicacion_caja !== undefined) {
+      const v = body.ubicacion_caja == null ? "" : String(body.ubicacion_caja).trim();
+      patch.ubicacion_caja = v || null;
     }
 
     if (Object.keys(patch).length === 0) {

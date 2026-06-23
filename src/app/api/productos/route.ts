@@ -15,7 +15,10 @@ const PRODUCTO_COLS =
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "es_vendible, es_insumo, controla_stock, valorizado, unidad_compra, unidad_receta, " +
-  "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta";
+  "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
+  // Autopartes (Fase 1)
+  "codigo_oem, codigo_alternativo, marca_repuesto, garantia_meses, permitir_venta_sin_stock, " +
+  "ubicacion_deposito, ubicacion_pasillo, ubicacion_estante, ubicacion_caja";
 
 function toNumber(v: unknown): unknown {
   return typeof v === "string" ? Number(v) : v;
@@ -178,6 +181,30 @@ export async function POST(request: NextRequest) {
     if (body.modo_receta === "produccion_previa" || body.modo_receta === "preparado_al_vender") {
       insertPayload.modo_receta = body.modo_receta;
     }
+
+    // Autopartes — campos del rubro (todos opcionales)
+    const codigoOem = typeof body.codigo_oem === "string" ? body.codigo_oem.trim() || null : null;
+    const codigoAlternativo = typeof body.codigo_alternativo === "string" ? body.codigo_alternativo.trim() || null : null;
+    const marcaRepuesto = typeof body.marca_repuesto === "string" ? body.marca_repuesto.trim() || null : null;
+    const garantiaMeses =
+      typeof body.garantia_meses === "number" && body.garantia_meses >= 0
+        ? Math.floor(body.garantia_meses)
+        : null;
+    insertPayload.codigo_oem = codigoOem;
+    insertPayload.codigo_alternativo = codigoAlternativo;
+    insertPayload.marca_repuesto = marcaRepuesto;
+    insertPayload.garantia_meses = garantiaMeses;
+    if (typeof body.permitir_venta_sin_stock === "boolean") {
+      insertPayload.permitir_venta_sin_stock = body.permitir_venta_sin_stock;
+    }
+    insertPayload.ubicacion_deposito =
+      typeof body.ubicacion_deposito === "string" ? body.ubicacion_deposito.trim() || null : null;
+    insertPayload.ubicacion_pasillo =
+      typeof body.ubicacion_pasillo === "string" ? body.ubicacion_pasillo.trim() || null : null;
+    insertPayload.ubicacion_estante =
+      typeof body.ubicacion_estante === "string" ? body.ubicacion_estante.trim() || null : null;
+    insertPayload.ubicacion_caja =
+      typeof body.ubicacion_caja === "string" ? body.ubicacion_caja.trim() || null : null;
 
     const ins = await sb.from("productos").insert(insertPayload).select(PRODUCTO_COLS).single();
     if (ins.error) {
