@@ -59,10 +59,6 @@ export default function EditarProductoPage() {
     codigo_alternativo: "",
     marca_repuesto: "",
     garantia_meses: "",
-    ubicacion_deposito: "",
-    ubicacion_pasillo: "",
-    ubicacion_estante: "",
-    ubicacion_caja: "",
   });
   const [permitirVentaSinStock, setPermitirVentaSinStock] = useState(false);
   const [imagenPath, setImagenPath] = useState<string | null>(null);
@@ -220,10 +216,6 @@ export default function EditarProductoPage() {
         codigo_alternativo: p.codigo_alternativo ?? "",
         marca_repuesto: p.marca_repuesto ?? "",
         garantia_meses: p.garantia_meses != null ? String(p.garantia_meses) : "",
-        ubicacion_deposito: p.ubicacion_deposito ?? "",
-        ubicacion_pasillo: p.ubicacion_pasillo ?? "",
-        ubicacion_estante: p.ubicacion_estante ?? "",
-        ubicacion_caja: p.ubicacion_caja ?? "",
       });
       setPermitirVentaSinStock(p.permitir_venta_sin_stock === true);
       setCodigoOriginal(p.codigo_barras ?? null);
@@ -385,10 +377,6 @@ export default function EditarProductoPage() {
         marca_repuesto: form.marca_repuesto.trim() || null,
         garantia_meses: form.garantia_meses.trim() === "" ? null : Math.max(parseInt(form.garantia_meses) || 0, 0),
         permitir_venta_sin_stock: permitirVentaSinStock,
-        ubicacion_deposito: form.ubicacion_deposito.trim() || null,
-        ubicacion_pasillo: form.ubicacion_pasillo.trim() || null,
-        ubicacion_estante: form.ubicacion_estante.trim() || null,
-        ubicacion_caja: form.ubicacion_caja.trim() || null,
       };
       if (cambioCodigo) {
         updatePayload.codigo_barras = codigoIngresado || null;
@@ -994,9 +982,7 @@ export default function EditarProductoPage() {
           {/* Datos de autopartes (Fase 2 — todos opcionales) */}
           <details className="rounded-lg border border-slate-200 bg-white p-4 open:shadow-sm" open={
             !!(form.codigo_oem || form.codigo_alternativo || form.marca_repuesto ||
-               form.garantia_meses || permitirVentaSinStock ||
-               form.ubicacion_deposito || form.ubicacion_pasillo ||
-               form.ubicacion_estante || form.ubicacion_caja)
+               form.garantia_meses || permitirVentaSinStock)
           }>
             <summary className="cursor-pointer text-sm font-semibold text-slate-700 hover:text-slate-900">
               Datos de autopartes (opcional)
@@ -1032,29 +1018,6 @@ export default function EditarProductoPage() {
                   />
                   Permitir vender aún sin stock disponible
                 </label>
-              </div>
-              <div className="sm:col-span-2 pt-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ubicación física en el depósito</p>
-              </div>
-              <div>
-                <label className={labelClass}>Depósito</label>
-                <input type="text" name="ubicacion_deposito" value={form.ubicacion_deposito} onChange={handleChange}
-                  placeholder="ej. Depósito 1" className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Pasillo</label>
-                <input type="text" name="ubicacion_pasillo" value={form.ubicacion_pasillo} onChange={handleChange}
-                  placeholder="ej. P-3" className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Estante</label>
-                <input type="text" name="ubicacion_estante" value={form.ubicacion_estante} onChange={handleChange}
-                  placeholder="ej. E-2" className={inputClass} />
-              </div>
-              <div>
-                <label className={labelClass}>Caja / contenedor</label>
-                <input type="text" name="ubicacion_caja" value={form.ubicacion_caja} onChange={handleChange}
-                  placeholder="ej. C-15" className={inputClass} />
               </div>
             </div>
           </details>

@@ -50,10 +50,6 @@ export default function NuevoProductoPage() {
     codigo_alternativo: "",
     marca_repuesto: "",
     garantia_meses: "",
-    ubicacion_deposito: "",
-    ubicacion_pasillo: "",
-    ubicacion_estante: "",
-    ubicacion_caja: "",
   });
   const [permitirVentaSinStock, setPermitirVentaSinStock] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -362,10 +358,6 @@ export default function NuevoProductoPage() {
           marca_repuesto: form.marca_repuesto.trim() || null,
           garantia_meses: form.garantia_meses.trim() === "" ? null : Math.max(parseInt(form.garantia_meses) || 0, 0),
           permitir_venta_sin_stock: permitirVentaSinStock,
-          ubicacion_deposito: form.ubicacion_deposito.trim() || null,
-          ubicacion_pasillo: form.ubicacion_pasillo.trim() || null,
-          ubicacion_estante: form.ubicacion_estante.trim() || null,
-          ubicacion_caja: form.ubicacion_caja.trim() || null,
         });
       } catch (err) {
         console.error("[inventario/nuevo] saveProducto error:", err);
@@ -1142,53 +1134,6 @@ export default function NuevoProductoPage() {
                   />
                   Permitir vender aún sin stock disponible
                 </label>
-              </div>
-              <div className="sm:col-span-2 pt-2">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ubicación física en el depósito</p>
-              </div>
-              <div>
-                <label className={labelClass}>Depósito</label>
-                <input
-                  type="text"
-                  name="ubicacion_deposito"
-                  value={form.ubicacion_deposito}
-                  onChange={handleChange}
-                  placeholder="ej. Depósito 1"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Pasillo</label>
-                <input
-                  type="text"
-                  name="ubicacion_pasillo"
-                  value={form.ubicacion_pasillo}
-                  onChange={handleChange}
-                  placeholder="ej. P-3"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Estante</label>
-                <input
-                  type="text"
-                  name="ubicacion_estante"
-                  value={form.ubicacion_estante}
-                  onChange={handleChange}
-                  placeholder="ej. E-2"
-                  className={inputClass}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Caja / contenedor</label>
-                <input
-                  type="text"
-                  name="ubicacion_caja"
-                  value={form.ubicacion_caja}
-                  onChange={handleChange}
-                  placeholder="ej. C-15"
-                  className={inputClass}
-                />
               </div>
             </div>
           </details>
