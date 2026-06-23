@@ -96,9 +96,11 @@ const HIDDEN_MENU_KEYS = new Set<string>([
   "historial-omnicanal",
   "monitoreo",
   "campanas",
-  // Marketing y automatización completo
+  // Marketing y automatización completo (incluye sorteos para que el header
+  // de familia desaparezca por completo).
   "marketing",
   "marketing_ops",
+  "sorteos",
   // Otros pedidos
   "usuarios",
   "planes",
