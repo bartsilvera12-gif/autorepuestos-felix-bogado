@@ -86,26 +86,17 @@ function adminEmpresasMatchesQuery(queryRaw: string): boolean {
 }
 
 /**
- * Keys del menú a ocultar para Autorepuestos Felix Bogado.
- * No los borro del array para mantener la trazabilidad — sólo los filtro al render.
+ * Allowlist del menú para Autorepuestos Felix Bogado.
+ * Solo estos keys se muestran en el sidebar; cualquier otro queda oculto.
+ * Mantener sincronizado si se piden nuevos módulos visibles para esta instancia.
  */
-const HIDDEN_MENU_KEYS = new Set<string>([
-  // Omnicanal completo
-  "conversaciones",
-  "conversaciones-finalizadas",
-  "historial-omnicanal",
-  "monitoreo",
-  "campanas",
-  // Marketing y automatización completo (incluye sorteos para que el header
-  // de familia desaparezca por completo).
-  "marketing",
-  "marketing_ops",
-  "sorteos",
-  // Otros pedidos
-  "usuarios",
-  "planes",
-  "comisiones",
-  "crm",
+const ALLOWED_MENU_KEYS = new Set<string>([
+  "dashboard",
+  "clientes",
+  "ventas",
+  "pagos",
+  "gastos",
+  "reportes",
 ]);
 
 const MENU_STRUCTURE: MenuItem[] = [
@@ -600,7 +591,7 @@ export default function Sidebar() {
       canAccessSidebarSlug(slug, slugs, esSuperAdmin, inactiveSlugsSet, { strict: strictAllowlist });
     return MENU_STRUCTURE.filter(
       (item) =>
-        !HIDDEN_MENU_KEYS.has(item.key) &&
+        ALLOWED_MENU_KEYS.has(item.key) &&
         favoritos.includes(idForSlug(item.slug)) &&
         access(item.slug) &&
         menuItemMatchesQuery(item, menuSearchQuery)
@@ -614,7 +605,7 @@ export default function Sidebar() {
       canAccessSidebarSlug(slug, slugs, esSuperAdmin, inactiveSlugsSet, { strict: strictAllowlist });
     return MENU_STRUCTURE.filter(
       (item) =>
-        !HIDDEN_MENU_KEYS.has(item.key) &&
+        ALLOWED_MENU_KEYS.has(item.key) &&
         !favoritos.includes(idForSlug(item.slug)) &&
         access(item.slug) &&
         menuItemMatchesQuery(item, menuSearchQuery)
