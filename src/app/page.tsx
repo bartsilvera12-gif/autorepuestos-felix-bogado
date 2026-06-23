@@ -501,7 +501,6 @@ function KpiCard({
   value,
   sub,
   color = "text-[#0F172A]",
-  icon,
   variation,
   variant = "light",
 }: {
@@ -509,7 +508,8 @@ function KpiCard({
   value: string;
   sub?: string;
   color?: string;
-  icon: string;
+  /** Mantenido por compat; ya no se renderiza para evitar el look de emoji. */
+  icon?: string;
   variation?: number;
   variant?: "light" | "zentra";
 }) {
@@ -520,8 +520,7 @@ function KpiCard({
         className="rounded-2xl border border-slate-200 p-6 shadow-lg shadow-black/10"
         style={{ backgroundColor: Z.card }}
       >
-        <div className="flex items-start justify-between gap-2">
-          <div className="text-2xl opacity-90">{icon}</div>
+        <div className="flex items-start justify-end gap-2">
           {variation !== undefined && (
             <span
               className="inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold"
@@ -552,8 +551,7 @@ function KpiCard({
       whileHover={{ y: -2 }}
       className="rounded-2xl border border-[#4FAEB2]/30 bg-white p-6 shadow-sm ring-1 ring-[#4FAEB2]/10 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
     >
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-2xl">{icon}</div>
+      <div className="flex items-start justify-end gap-2">
         {variation !== undefined && (
           <span
             className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-semibold ${
@@ -1009,7 +1007,7 @@ function FinMontoGs({
   if (kpi) {
     return (
       <p
-        className={`min-w-0 w-full text-left font-bold leading-none tabular-nums whitespace-nowrap [font-size:clamp(0.65rem,5.5cqi+0.15rem,1.45rem)] ${className}`}
+        className={`min-w-0 w-full text-left font-bold leading-none tabular-nums whitespace-nowrap [font-size:clamp(0.65rem,5.5cqi+0.15rem,1.875rem)] ${className}`}
         title={texto}
       >
         {texto}
@@ -1838,25 +1836,19 @@ const DashVentas = memo(function DashVentas({
 
       {/* KPIs rentabilidad */}
       <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-start gap-3">
-          <span className="text-2xl">💰</span>
-          <div>
-            <p className={`text-2xl font-bold tabular-nums ${gananciaHoy >= 0 ? "text-green-600" : "text-red-600"}`}>
-              Gs. {formatGsFull(gananciaHoy)}
-            </p>
-            <p className="text-xs font-semibold text-gray-700 mt-0.5">Ganancia del día</p>
-            <p className="text-xs text-gray-400">precio venta − costo promedio × cant.</p>
-          </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <p className={`text-3xl font-bold tabular-nums ${gananciaHoy >= 0 ? "text-green-600" : "text-red-600"}`}>
+            Gs. {formatGsFull(gananciaHoy)}
+          </p>
+          <p className="text-xs font-semibold text-gray-700 mt-0.5">Ganancia del día</p>
+          <p className="text-xs text-gray-400">precio venta − costo promedio × cant.</p>
         </div>
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex items-start gap-3">
-          <span className="text-2xl">📊</span>
-          <div>
-            <p className={`text-2xl font-bold tabular-nums ${margenProm >= 20 ? "text-green-600" : margenProm >= 10 ? "text-amber-600" : "text-red-600"}`}>
-              {margenProm.toFixed(1)}%
-            </p>
-            <p className="text-xs font-semibold text-gray-700 mt-0.5">Margen promedio (hoy)</p>
-            <p className="text-xs text-gray-400">ganancia / precio venta</p>
-          </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+          <p className={`text-3xl font-bold tabular-nums ${margenProm >= 20 ? "text-green-600" : margenProm >= 10 ? "text-amber-600" : "text-red-600"}`}>
+            {margenProm.toFixed(1)}%
+          </p>
+          <p className="text-xs font-semibold text-gray-700 mt-0.5">Margen promedio (hoy)</p>
+          <p className="text-xs text-gray-400">ganancia / precio venta</p>
         </div>
       </div>
 
@@ -2087,11 +2079,11 @@ export default function DashboardPage() {
     }
   }, [tab, effectiveTabs]);
 
-  const TAB_META: Record<TabDash, { label: string; icon: string }> = {
-    comercial: { label: "Comercial", icon: "📊" },
-    financiero: { label: "Financiero", icon: "💰" },
-    inventario: { label: "Inventario", icon: "📦" },
-    ventas: { label: "Ventas", icon: "🛒" },
+  const TAB_META: Record<TabDash, { label: string }> = {
+    comercial: { label: "Comercial" },
+    financiero: { label: "Financiero" },
+    inventario: { label: "Inventario" },
+    ventas: { label: "Ventas" },
   };
 
   if (!config) {
@@ -2269,7 +2261,6 @@ export default function DashboardPage() {
                     : { color: Z.muted }
                 }
               >
-                <span aria-hidden>{meta.icon}</span>
                 {meta.label}
               </button>
             );
