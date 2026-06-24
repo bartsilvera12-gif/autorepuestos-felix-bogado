@@ -95,6 +95,7 @@ const ALLOWED_MENU_KEYS = new Set<string>([
   "clientes",
   "ventas",
   "pagos",
+  "pagos_proveedores",
   "gastos",
   "reportes",
   "configuracion",
@@ -150,6 +151,7 @@ const MENU_STRUCTURE: MenuItem[] = [
   ]},
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
   { key: "pagos", slug: "pagos", label: "Cobros", href: "/pagos", icon: Banknote },
+  { key: "pagos_proveedores", slug: "pagos_proveedores", label: "Pagos a proveedores", href: "/pagos-proveedores", icon: Banknote },
   {
     key: "compras",
     slug: "compras",
@@ -215,7 +217,7 @@ const MENU_STRUCTURE: MenuItem[] = [
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["clientes", "crm", "gestion-clientes", "ventas", "presupuestos", "comisiones", "planes"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["pagos", "gastos", "notas_credito", "reportes"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["pagos", "pagos_proveedores", "gastos", "notas_credito", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "recetas", "proyectos"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones", "conversaciones-finalizadas", "historial-omnicanal", "monitoreo", "campanas"] },
   { id: "marketing", titulo: "Marketing y Automatización", keys: ["marketing", "marketing_ops", "sorteos"] },
