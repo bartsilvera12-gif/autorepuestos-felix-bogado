@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getMovimientos } from "@/lib/inventario/storage";
 import type { MovimientoInventario, TipoMovimiento, OrigenMovimiento } from "@/lib/inventario/types";
+
+type PageSize = 10 | 50 | 100 | "todos";
 
 const tipoBadge: Record<TipoMovimiento, string> = {
   ENTRADA: "bg-green-100 text-green-700",
@@ -56,6 +58,10 @@ export default function MovimientosPage() {
   const [fechaDesde, setFechaDesde] = useState("");  // "YYYY-MM-DD"
   const [fechaHasta, setFechaHasta] = useState(""); // "YYYY-MM-DD"
 
+  // Paginación client-side (mismo patrón que /inventario)
+  const [pageSize, setPageSize] = useState<PageSize>(50);
+  const [paginaActual, setPaginaActual] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
     getMovimientos().then((data) => {
@@ -64,7 +70,7 @@ export default function MovimientosPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const filtrados = todos.filter((m) => {
+  const filtrados = useMemo(() => todos.filter((m) => {
     const texto = busqueda.toLowerCase();
     const coincideTexto =
       texto === "" ||
@@ -72,14 +78,25 @@ export default function MovimientosPage() {
       m.producto_sku.toLowerCase().includes(texto);
     const coincideTipo = filtroTipo === "" || m.tipo === filtroTipo;
     const coincideOrigen = filtroOrigen === "" || m.origen === filtroOrigen;
-
-    // Compara solo la parte de fecha (YYYY-MM-DD) del ISO string del movimiento
-    const fechaMov = m.fecha.slice(0, 10); // "YYYY-MM-DD"
+    const fechaMov = m.fecha.slice(0, 10);
     const coincideDesde = fechaDesde === "" || fechaMov >= fechaDesde;
     const coincideHasta = fechaHasta === "" || fechaMov <= fechaHasta;
-
     return coincideTexto && coincideTipo && coincideOrigen && coincideDesde && coincideHasta;
-  });
+  }), [todos, busqueda, filtroTipo, filtroOrigen, fechaDesde, fechaHasta]);
+
+  // Cuando cambia el universo filtrado, volvemos a la página 0 para que el
+  // usuario no quede en una página vacía.
+  useEffect(() => {
+    setPaginaActual(0);
+  }, [busqueda, filtroTipo, filtroOrigen, fechaDesde, fechaHasta, pageSize]);
+
+  const totalPaginas = pageSize === "todos" ? 1 : Math.max(1, Math.ceil(filtrados.length / pageSize));
+  const paginaSegura = Math.min(paginaActual, totalPaginas - 1);
+  const filtradosPagina = useMemo(() => {
+    if (pageSize === "todos") return filtrados;
+    const start = paginaSegura * pageSize;
+    return filtrados.slice(start, start + pageSize);
+  }, [filtrados, paginaSegura, pageSize]);
 
   return (
     <div className="space-y-8">
@@ -102,7 +119,9 @@ export default function MovimientosPage() {
               Nuevo movimiento
             </Link>
             <span className="text-sm text-gray-400">
-              {filtrados.length} de {todos.length} registros
+              {filtrados.length === todos.length
+                ? `${todos.length} registro${todos.length === 1 ? "" : "s"}`
+                : `${filtrados.length} de ${todos.length} (filtrado)`}
             </span>
           </div>
           <p className="text-xs text-gray-400">
@@ -180,6 +199,20 @@ export default function MovimientosPage() {
           </div>
         </div>
 
+        {/* Paginación TOP (espejo del bloque de abajo). Aparece solo si hay
+            registros para evitar UI vacía. */}
+        {filtrados.length > 0 && (
+          <PaginationBar
+            pageSize={pageSize}
+            setPageSize={setPageSize}
+            paginaSegura={paginaSegura}
+            setPaginaActual={setPaginaActual}
+            totalPaginas={totalPaginas}
+            total={filtrados.length}
+            etiqueta="movimiento"
+          />
+        )}
+
         {/* Tabla — min-w activa el scroll horizontal en mobile;
             SKU, Origen, Usuario se ocultan en pantallas chicas. */}
         <div className="overflow-x-auto">
@@ -206,7 +239,7 @@ export default function MovimientosPage() {
                   </td>
                 </tr>
               ) : (
-                filtrados.map((m) => {
+                filtradosPagina.map((m) => {
                   const signo =
                     m.tipo === "ENTRADA" ? "+" : m.tipo === "SALIDA" ? "−" : m.cantidad >= 0 ? "+" : "";
                   const cantidadColor =
@@ -250,8 +283,83 @@ export default function MovimientosPage() {
           </table>
         </div>
 
+        {/* Paginación BOTTOM */}
+        {filtrados.length > 0 && (
+          <PaginationBar
+            pageSize={pageSize}
+            setPageSize={setPageSize}
+            paginaSegura={paginaSegura}
+            setPaginaActual={setPaginaActual}
+            totalPaginas={totalPaginas}
+            total={filtrados.length}
+            etiqueta="movimiento"
+          />
+        )}
+
       </div>
 
+    </div>
+  );
+}
+
+interface PaginationBarProps {
+  pageSize: PageSize;
+  setPageSize: (s: PageSize) => void;
+  paginaSegura: number;
+  setPaginaActual: (n: number | ((p: number) => number)) => void;
+  totalPaginas: number;
+  total: number;
+  etiqueta: string;
+}
+
+function PaginationBar({
+  pageSize, setPageSize, paginaSegura, setPaginaActual, totalPaginas, total, etiqueta,
+}: PaginationBarProps) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-3 px-1 py-3 text-sm">
+      <div className="flex items-center gap-2 text-slate-600">
+        <label className="text-xs text-slate-500">Mostrar</label>
+        <select
+          value={String(pageSize)}
+          onChange={(e) => {
+            const v = e.target.value;
+            setPageSize(v === "todos" ? "todos" : (parseInt(v) as 10 | 50 | 100));
+          }}
+          className="rounded-md border border-slate-300 bg-white px-2 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
+        >
+          <option value="10">10</option>
+          <option value="50">50</option>
+          <option value="100">100</option>
+          <option value="todos">Todos</option>
+        </select>
+        <span className="text-xs text-slate-400">
+          {pageSize === "todos"
+            ? `${total} ${etiqueta}(s)`
+            : `${paginaSegura * pageSize + 1}–${Math.min((paginaSegura + 1) * pageSize, total)} de ${total}`}
+        </span>
+      </div>
+
+      {pageSize !== "todos" && totalPaginas > 1 && (
+        <div className="flex items-center gap-1">
+          <button type="button" onClick={() => setPaginaActual(0)} disabled={paginaSegura === 0}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Primera página">«</button>
+          <button type="button" onClick={() => setPaginaActual((p) => Math.max(0, p - 1))} disabled={paginaSegura === 0}
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            ‹ Anterior
+          </button>
+          <span className="px-3 text-xs text-slate-600 tabular-nums">
+            Página <span className="font-semibold">{paginaSegura + 1}</span> de {totalPaginas}
+          </span>
+          <button type="button" onClick={() => setPaginaActual((p) => Math.min(totalPaginas - 1, p + 1))} disabled={paginaSegura >= totalPaginas - 1}
+            className="rounded-md border border-slate-200 bg-white px-2.5 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed">
+            Siguiente ›
+          </button>
+          <button type="button" onClick={() => setPaginaActual(totalPaginas - 1)} disabled={paginaSegura >= totalPaginas - 1}
+            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
+            title="Última página">»</button>
+        </div>
+      )}
     </div>
   );
 }
