@@ -565,7 +565,7 @@ export default function InventarioPage() {
                 {tab !== "materia" && <th className="py-3 pr-4 font-medium">Precio Venta</th>}
                 <th className="py-3 pr-4 font-medium text-center">Stock actual</th>
                 <th className="py-3 pr-4 text-center font-medium hidden lg:table-cell">Stock Mín.</th>
-                <th className="py-3 pr-4 font-medium hidden lg:table-cell">Ubicación</th>
+                <th className="py-3 pr-4 font-medium hidden lg:table-cell">Departamento</th>
                 <th className="py-3 pr-4 font-medium hidden lg:table-cell">Distribuidor</th>
                 {tab !== "materia" && (
                   <th className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
