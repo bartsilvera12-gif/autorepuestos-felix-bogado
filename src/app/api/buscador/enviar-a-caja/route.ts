@@ -89,7 +89,8 @@ async function ensureEstadoPendiente(sb: AppSupabaseClient, empresaId: string): 
       color: "#f59e0b",
       sort_order: 1,
       cuenta_sla: false,
-      tipo_sla: "abierto",
+      // tipo_sla CHECK acepta solo: 'interno' | 'cliente' | 'pausado' | 'final'.
+      tipo_sla: "interno",
       es_estado_inicial: true,
       es_estado_final: false,
       activo: true,
