@@ -61,12 +61,14 @@ export default function MovimientosPage() {
   // Paginación client-side (mismo patrón que /inventario)
   const [pageSize, setPageSize] = useState<PageSize>(50);
   const [paginaActual, setPaginaActual] = useState(0);
+  const [cargandoLista, setCargandoLista] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
-    getMovimientos().then((data) => {
-      if (!cancelled) setTodos(data);
-    });
+    setCargandoLista(true);
+    getMovimientos()
+      .then((data) => { if (!cancelled) setTodos(data); })
+      .finally(() => { if (!cancelled) setCargandoLista(false); });
     return () => { cancelled = true; };
   }, []);
 
@@ -230,7 +232,19 @@ export default function MovimientosPage() {
               </tr>
             </thead>
             <tbody>
-              {filtrados.length === 0 ? (
+              {cargandoLista ? (
+                <tr>
+                  <td colSpan={8} className="py-12 text-center text-sm text-slate-400">
+                    <div className="inline-flex items-center gap-2">
+                      <svg className="h-4 w-4 animate-spin text-[#4FAEB2]" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeOpacity="0.25" strokeWidth="3" />
+                        <path d="M22 12a10 10 0 0 0-10-10" stroke="currentColor" strokeWidth="3" strokeLinecap="round" />
+                      </svg>
+                      Cargando movimientos…
+                    </div>
+                  </td>
+                </tr>
+              ) : filtrados.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-gray-400">
                     {todos.length === 0
