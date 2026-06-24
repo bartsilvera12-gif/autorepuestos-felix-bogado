@@ -304,6 +304,15 @@ export async function commitProductos(
     errorMessages: [], warningMessages: [],
   };
 
+  // Tracker de fallas sistemáticas: si TODOS los INSERTs a movimientos fallan
+  // por el mismo motivo (típicamente FK violation o columna inexistente), no
+  // queremos ahogar al usuario con 4000 warnings idénticos — guardamos los
+  // primeros N detallados y emitimos un error de resumen al final.
+  let movimientosFallidos = 0;
+  const movimientoFailSamples: string[] = [];
+  let movimientoFailFirstCode: string | null = null;
+  const MOVIMIENTO_FAIL_SAMPLE_LIMIT = 5;
+
   async function registrarMovimiento(
     producto_id: string, producto_nombre: string, producto_sku: string,
     tipo: "ENTRADA" | "SALIDA", origen: "inventario_inicial" | "ajuste_manual",
@@ -328,7 +337,14 @@ export async function commitProductos(
       if (tipo === "ENTRADA") out.unidades_entrada += cantidad;
       else out.unidades_salida += cantidad;
     } catch (e) {
-      out.warningMessages.push(`No se pudo registrar movimiento para ${producto_nombre}: ${(e as Error).message.slice(0, 120)}`);
+      movimientosFallidos++;
+      const err = e as Error & { code?: string };
+      if (movimientoFailFirstCode == null) movimientoFailFirstCode = err.code ?? "UNKNOWN";
+      if (movimientoFailSamples.length < MOVIMIENTO_FAIL_SAMPLE_LIMIT) {
+        movimientoFailSamples.push(
+          `[${err.code ?? "?"}] ${producto_nombre} (sku=${producto_sku}): ${err.message.slice(0, 140)}`
+        );
+      }
     }
   }
 
@@ -465,6 +481,29 @@ export async function commitProductos(
       }
     }
   }
+
+  // Si TODOS (o casi todos) los movimientos fallaron, es un problema sistémico
+  // (FK mal apuntada, columna inexistente, etc.) que el usuario tiene que ver
+  // como ERROR, no como warning. Antes esto se atragantaba en warnings y la
+  // importación se reportaba "exitosa" pese a perder miles de movimientos.
+  if (movimientosFallidos > 0) {
+    const intentados = out.movimientos_generados + movimientosFallidos;
+    const pctFallidos = (movimientosFallidos / intentados) * 100;
+    const resumen =
+      `No se pudieron registrar ${movimientosFallidos} de ${intentados} movimientos de inventario ` +
+      `(${pctFallidos.toFixed(0)}%, código=${movimientoFailFirstCode}). ` +
+      `Ejemplos:\n  - ${movimientoFailSamples.join("\n  - ")}`;
+    if (pctFallidos >= 50) {
+      // Falla sistémica: error duro para que se vea en rojo en el wizard.
+      out.errorMessages.push(resumen);
+      out.errors += movimientosFallidos;
+    } else {
+      // Fallas aisladas: warning con detalle, no error.
+      out.warningMessages.push(resumen);
+      out.warnings += movimientosFallidos;
+    }
+  }
+
   return out;
 }
 
