@@ -683,12 +683,12 @@ export default function EditarProductoPage() {
                 </div>
               </div>
               <div className={`md:col-span-4 min-w-0 ${tipoGastro === "menu" ? "hidden" : ""}`}>
-                <label className={labelClass}>Proveedor principal</label>
+                <label className={labelClass}>Distribuidor principal</label>
                 <SelectFromList
                   value={proveedorId}
                   onChange={setProveedorId}
                   options={proveedores.map((p) => ({ id: p.id, label: p.nombre }))}
-                  emptyShort="Sin proveedores"
+                  emptyShort="Sin distribuidores"
                 />
                 <div className="mt-2 flex items-center justify-between gap-2">
                   <span className="text-xs text-gray-400 truncate">

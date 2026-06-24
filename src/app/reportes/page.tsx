@@ -44,10 +44,10 @@ export default function ReportesPage() {
         </li>
         <li>
           <ReportCard
-            title="Proveedores"
+            title="Distribuidores"
             subtitle="Abastecimiento y relación comercial"
             icon={Truck}
-            description="Resumen de proveedores, compras por proveedor y actividad del mes."
+            description="Resumen de distribuidores, compras por distribuidor y actividad del mes."
             href="/reportes/proveedores"
           />
         </li>
