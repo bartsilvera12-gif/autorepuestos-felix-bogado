@@ -269,7 +269,26 @@ export async function GET(request: NextRequest) {
       buildFacturasQ(),
       buildPagosQ(),
       buildTipificacionesQ(),
-      supabase.from("productos").select("*").eq("empresa_id", empresaId).eq("activo", true),
+      /** PostgREST self-host trunca a db-max-rows (~1000) ignorando .limit().
+       *  Paginamos con .range() en chunks para traer el catálogo completo. */
+      (async () => {
+        const CHUNK = 1000;
+        const MAX_ROWS = 50000;
+        const all: unknown[] = [];
+        for (let offset = 0; offset < MAX_ROWS; offset += CHUNK) {
+          const r = await supabase
+            .from("productos")
+            .select("*")
+            .eq("empresa_id", empresaId)
+            .eq("activo", true)
+            .range(offset, offset + CHUNK - 1);
+          if (r.error) return { data: null, error: r.error };
+          const batch = (r.data ?? []) as unknown[];
+          all.push(...batch);
+          if (batch.length < CHUNK) break;
+        }
+        return { data: all, error: null };
+      })(),
       buildVentasQ(),
       ventasItemsParalelo,
       buildComprasQ(),
