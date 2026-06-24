@@ -497,7 +497,7 @@ export default function InventarioPage() {
                 <th className="py-3 pr-4 font-medium text-center">Stock actual</th>
                 <th className="py-3 pr-4 text-center font-medium hidden lg:table-cell">Stock Mín.</th>
                 <th className="py-3 pr-4 font-medium hidden lg:table-cell">Ubicación</th>
-                <th className="py-3 pr-4 font-medium hidden lg:table-cell">Valuación</th>
+                <th className="py-3 pr-4 font-medium hidden lg:table-cell">Distribuidor</th>
                 {tab !== "materia" && (
                   <th className="hidden py-3 pr-6 text-right font-medium lg:table-cell">
                     <span title="(precio - costo) / precio × 100">Margen s/venta</span>
@@ -588,10 +588,10 @@ export default function InventarioPage() {
                           ? <span className="font-medium text-gray-700">{p.ubicacion_deposito}</span>
                           : <span className="text-gray-300">—</span>}
                     </td>
-                    <td className="py-4 pr-4 hidden lg:table-cell">
-                      <span className={`px-2 py-1 rounded-full text-xs font-semibold ${metodoBadge[p.metodo_valuacion]}`}>
-                        {p.metodo_valuacion}
-                      </span>
+                    <td className="py-4 pr-4 text-gray-600 text-xs hidden lg:table-cell">
+                      {p.distribuidor_nombre
+                        ? <span className="font-medium text-gray-700">{p.distribuidor_nombre}</span>
+                        : <span className="text-gray-300">—</span>}
                     </td>
                     {tab !== "materia" && (
                       <td className={`hidden py-4 pr-6 text-right font-semibold tabular-nums lg:table-cell ${margenColor(margen)}`}>

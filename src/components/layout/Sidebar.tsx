@@ -158,7 +158,7 @@ const MENU_STRUCTURE: MenuItem[] = [
     icon: Package,
     children: [
       { label: "Órdenes", href: "/compras" },
-      { label: "Proveedores", href: "/proveedores" },
+      { label: "Distribuidores", href: "/proveedores" },
     ],
   },
   { key: "gastos", slug: "gastos", label: "Gastos", href: "/gastos", icon: Receipt },
