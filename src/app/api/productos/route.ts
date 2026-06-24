@@ -63,18 +63,27 @@ export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    // PostgREST por default trunca a 1000 filas. Subimos el cap a 20.000
-    // para cubrir catálogos grandes (Felix Bogado tiene ~6k SKUs). Si en el
-    // futuro se pasa de 20k, conviene paginar server-side.
-    const { data, error } = await ctx.supabase
-      .from("productos")
-      .select(PRODUCTO_COLS)
-      .eq("empresa_id", ctx.auth.empresa_id)
-      .eq("activo", true)
-      .order("nombre")
-      .limit(20000);
-    if (error) throw new Error(error.message);
-    const rows = ((data ?? []) as unknown as Record<string, unknown>[]).map(rowToApi);
+    // PostgREST self-host tiene un cap de filas (db-max-rows, típicamente
+    // 1000) que .limit() del cliente NO anula. Paginamos con .range() en
+    // chunks para juntar TODO el catálogo sin tocar config del servidor.
+    // Cap absoluto de seguridad: 50.000 filas (8 round-trips a 6k SKUs).
+    const CHUNK = 1000;
+    const MAX_ROWS = 50000;
+    const all: Record<string, unknown>[] = [];
+    for (let offset = 0; offset < MAX_ROWS; offset += CHUNK) {
+      const { data, error } = await ctx.supabase
+        .from("productos")
+        .select(PRODUCTO_COLS)
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .eq("activo", true)
+        .order("nombre")
+        .range(offset, offset + CHUNK - 1);
+      if (error) throw new Error(error.message);
+      const batch = (data ?? []) as unknown as Record<string, unknown>[];
+      all.push(...batch);
+      if (batch.length < CHUNK) break; // no hay más
+    }
+    const rows = all.map(rowToApi);
     return NextResponse.json(successResponse({ productos: rows }));
   } catch (err) {
     console.error("[/api/productos GET]", err instanceof Error ? err.message : err);
