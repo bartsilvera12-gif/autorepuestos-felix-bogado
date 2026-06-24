@@ -17,7 +17,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
-import { Search, MapPin, Car, Trash2, Send, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { Search, MapPin, Car, Trash2, Send, Loader2, CheckCircle2, Clock, XCircle } from "lucide-react";
 
 type ProductoHit = {
   id: string;
@@ -60,7 +60,7 @@ type MiPedido = {
   cliente_nombre: string | null;
   total_estimado: number;
   items_count: number;
-  estado_facturacion: "pendiente_caja" | "facturado";
+  estado_facturacion: "pendiente_caja" | "facturado" | "cancelado";
   venta_numero: string | null;
   created_at: string | null;
   facturado_at: string | null;
@@ -192,7 +192,7 @@ export default function BuscadorPage() {
         cliente_nombre: p.cliente_nombre ? String(p.cliente_nombre) : null,
         total_estimado: Number(p.total_estimado) || 0,
         items_count: Array.isArray(p.items) ? (p.items as unknown[]).length : 0,
-        estado_facturacion: (p.estado === "facturado" ? "facturado" : "pendiente_caja"),
+        estado_facturacion: (p.estado === "facturado" ? "facturado" : p.estado === "cancelado" ? "cancelado" : "pendiente_caja"),
         venta_numero: p.venta_numero ? String(p.venta_numero) : null,
         created_at: p.created_at ? String(p.created_at) : null,
         facturado_at: p.facturado_at ? String(p.facturado_at) : null,
@@ -230,6 +230,25 @@ export default function BuscadorPage() {
     () => cart.reduce((s, it) => s + it.cantidad * (it.tipo_precio === "mayorista" ? it.precio_mayorista : it.precio_venta), 0),
     [cart]
   );
+
+  async function cancelarPedido(p: MiPedido) {
+    const ok = window.confirm(
+      `¿Cancelar el pedido "${p.titulo}"?\n\n` +
+      `Total: ${fmtGs(p.total_estimado)} · ${p.items_count} item(s)\n\n` +
+      `El cajero ya no lo va a ver. Esta acción no se puede deshacer.`
+    );
+    if (!ok) return;
+    try {
+      const r = await fetchWithSupabaseSession(`/api/pedidos-caja/${p.id}?motivo=cancelado+por+vendedor`, {
+        method: "DELETE",
+      });
+      const j = await r.json();
+      if (!r.ok || !j?.success) throw new Error(j?.error ?? `Error ${r.status}`);
+      void refreshMisPedidos();
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "No se pudo cancelar el pedido.");
+    }
+  }
 
   async function enviar() {
     if (cart.length === 0) { setErrMsg("El pedido está vacío."); return; }
@@ -479,11 +498,12 @@ export default function BuscadorPage() {
                 <th className="px-4 py-2.5 text-right">Total</th>
                 <th className="px-4 py-2.5 text-left">Estado</th>
                 <th className="px-4 py-2.5 text-left">Fecha</th>
+                <th className="px-4 py-2.5 text-right">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {misPedidos.length === 0 ? (
-                <tr><td colSpan={6} className="py-8 text-center text-sm text-slate-400">Todavía no enviaste ningún pedido.</td></tr>
+                <tr><td colSpan={7} className="py-8 text-center text-sm text-slate-400">Todavía no enviaste ningún pedido.</td></tr>
               ) : misPedidos.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
                   <td className="px-4 py-2.5 font-medium text-slate-800">{p.titulo}</td>
@@ -496,6 +516,11 @@ export default function BuscadorPage() {
                         <CheckCircle2 className="h-3 w-3" />
                         Cobrado{p.venta_numero ? ` · ${p.venta_numero}` : ""}
                       </span>
+                    ) : p.estado_facturacion === "cancelado" ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
+                        <XCircle className="h-3 w-3" />
+                        Cancelado
+                      </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
                         <Clock className="h-3 w-3" />
@@ -504,6 +529,20 @@ export default function BuscadorPage() {
                     )}
                   </td>
                   <td className="px-4 py-2.5 text-xs text-slate-500">{fmtFecha(p.created_at)}</td>
+                  <td className="px-4 py-2.5 text-right">
+                    {p.estado_facturacion === "pendiente_caja" ? (
+                      <button
+                        type="button"
+                        onClick={() => cancelarPedido(p)}
+                        className="inline-flex items-center gap-1 rounded-md border border-red-200 bg-white px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                      >
+                        <XCircle className="h-3 w-3" />
+                        Cancelar
+                      </button>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
