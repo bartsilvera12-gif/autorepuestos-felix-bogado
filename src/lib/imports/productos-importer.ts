@@ -310,6 +310,9 @@ export interface CommitOutcome {
   inserted: number;
   updated: number;
   skipped: number;
+  /** Sub-conteo: filas saltadas porque los datos en el Excel son
+   *  idénticos a los que ya están en DB (re-import inocuo). */
+  skippedNoCambios: number;
   errors: number;
   warnings: number;
   movimientos_generados: number;
@@ -346,7 +349,7 @@ export async function commitProductos(
   const refImport = `IMPORT_EXCEL:${(ctx.filename ?? "").slice(0, 80)}`;
 
   const out: CommitOutcome = {
-    inserted: 0, updated: 0, skipped: 0, errors: 0, warnings: 0,
+    inserted: 0, updated: 0, skipped: 0, skippedNoCambios: 0, errors: 0, warnings: 0,
     movimientos_generados: 0, unidades_entrada: 0, unidades_salida: 0,
     errorMessages: [], warningMessages: [],
   };
@@ -436,7 +439,16 @@ export async function commitProductos(
   for (const chunk of chunked(parsed, 200)) {
     await Promise.all(chunk.map(async (p) => {
       if (p.errors.length > 0) { out.errors++; out.errorMessages.push(`Fila ${p.row_number}: ${p.errors.join("; ")}`); return; }
-      if (p.duplicado_en_archivo) { out.skipped++; return; }
+      if (p.duplicado_en_archivo) {
+        out.skipped++;
+        // Loggear las warnings de duplicado para que el usuario vea
+        // exactamente qué filas se omitieron y por qué.
+        if (p.warnings.length > 0) {
+          out.warnings++;
+          out.warningMessages.push(`Fila ${p.row_number}: ${p.warnings.join("; ")}`);
+        }
+        return;
+      }
       const categoriaId = p.categoria_nombre ? maps.categoriasByName.get(p.categoria_nombre) ?? null : null;
       const proveedorId = p.proveedor_nombre ? maps.proveedoresByName.get(p.proveedor_nombre) ?? null : null;
       const ubicacionId = p.ubicacion_nombre
@@ -467,7 +479,11 @@ export async function commitProductos(
               (existente.unidad_medida ?? "") === (p.unidad_medida ?? "") &&
               (existente.ubicacion_deposito ?? "") === (p.ubicacion_deposito ?? "") &&
               (existente.codigo_barras ?? "") === (p.codigo_barras ?? "");
-            if (igual) { out.skipped++; return; }
+            if (igual) {
+              out.skipped++;
+              out.skippedNoCambios++;
+              return;
+            }
           }
 
           await pool.query(
@@ -573,6 +589,14 @@ export async function commitProductos(
       out.warningMessages.push(resumen);
       out.warnings += movimientosFallidos;
     }
+  }
+
+  // Nota informativa al final si la mayoría de filas se saltaron por
+  // "sin cambios" — explica al usuario por qué INSERTADOS/ACTUALIZADOS=0.
+  if (out.skippedNoCambios > 0) {
+    out.warningMessages.unshift(
+      `${out.skippedNoCambios} fila(s) omitidas porque los datos ya estaban idénticos en la base (re-importación sin cambios).`
+    );
   }
 
   return out;
