@@ -266,21 +266,16 @@ export default function NuevaVentaPage() {
     setPedidoId(pid);
     (async () => {
       try {
-        const res = await fetch(`/api/proyectos/${pid}`, { credentials: "include", cache: "no-store" });
+        const res = await fetch(`/api/pedidos-caja/${pid}`, { credentials: "include", cache: "no-store" });
         const j = await res.json();
-        if (cancelled || !j?.success || !j.data?.proyecto) return;
-        const p = j.data.proyecto as { brief_data?: unknown; cliente_id?: string | null; metadata?: unknown };
-        const brief = (p.brief_data && typeof p.brief_data === "object" && !Array.isArray(p.brief_data))
-          ? (p.brief_data as Record<string, unknown>) : {};
-        const meta = (p.metadata && typeof p.metadata === "object" && !Array.isArray(p.metadata))
-          ? (p.metadata as Record<string, unknown>) : {};
-        setPedidoNumero(
-          (typeof brief.numero_control === "string" && brief.numero_control) ||
-          (typeof brief.numero_presupuesto === "string" && brief.numero_presupuesto) ||
-          (typeof meta.numero_presupuesto === "string" && meta.numero_presupuesto) || null
-        );
-        const itemsRaw = Array.isArray(brief.items) ? (brief.items as Record<string, unknown>[]) : [];
-        const lineas: LineaVenta[] = itemsRaw
+        if (cancelled || !j?.success || !j.data?.pedido) return;
+        const p = j.data.pedido as {
+          titulo?: string;
+          cliente_id?: string | null;
+          items?: Array<{ producto_id: string; producto_nombre: string; sku: string | null; cantidad: number; precio_venta: number; tipo_precio: "minorista" | "mayorista" }>;
+        };
+        setPedidoNumero(p.titulo ?? null);
+        const lineas: LineaVenta[] = (p.items ?? [])
           .filter((it) => it.producto_id && (Number(it.cantidad) || 0) > 0)
           .map((it) => {
             const cantidad = Number(it.cantidad) || 0;
@@ -292,13 +287,13 @@ export default function NuevaVentaPage() {
             const totalLinea = subtotal;
             return {
               producto_id: String(it.producto_id),
-              producto_nombre: typeof it.producto_nombre === "string" ? it.producto_nombre : "",
-              sku: typeof it.sku === "string" ? it.sku : "",
+              producto_nombre: it.producto_nombre ?? "",
+              sku: it.sku ?? "",
               cantidad,
               precio_venta_original: precio,
               precio_venta: precio,
               tipo_iva: iva,
-              tipo_precio: "minorista" as TipoPrecioVenta,
+              tipo_precio: (it.tipo_precio === "mayorista" ? "mayorista" : "minorista") as TipoPrecioVenta,
               subtotal,
               monto_iva: montoIva,
               total_linea: totalLinea,

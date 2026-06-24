@@ -14,6 +14,7 @@ type PedidoPendiente = {
 };
 
 const ORIGEN_LABEL: Record<string, string> = {
+  buscador: "Salón",
   presupuesto: "Presupuesto",
   venta: "Venta",
   manual: "Manual",
@@ -37,11 +38,27 @@ export default function PedidosPendientesCaja() {
 
   useEffect(() => {
     let cancel = false;
-    fetch("/api/caja/pedidos-pendientes", { credentials: "include", cache: "no-store" })
+    fetch("/api/pedidos-caja?estado=pendiente", { credentials: "include", cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
         if (cancel) return;
-        if (j?.success && Array.isArray(j.data?.pedidos)) setPedidos(j.data.pedidos as PedidoPendiente[]);
+        if (!j?.success || !Array.isArray(j.data?.pedidos)) return;
+        // Mapear shape de pedidos_caja → PedidoPendiente (UI).
+        const raw = j.data.pedidos as Array<Record<string, unknown>>;
+        setPedidos(raw.map((p) => ({
+          id: String(p.id),
+          titulo: String(p.titulo ?? "Pedido"),
+          cliente_nombre: p.cliente_nombre ? String(p.cliente_nombre) : null,
+          total_estimado: Number(p.total_estimado) || 0,
+          origen: "buscador",
+          fecha: p.created_at ? String(p.created_at) : null,
+          items: Array.isArray(p.items)
+            ? (p.items as Array<Record<string, unknown>>).map((it) => ({
+                producto_nombre: String(it.producto_nombre ?? "—"),
+                cantidad: Number(it.cantidad) || 0,
+              }))
+            : [],
+        })));
       })
       .catch(() => {})
       .finally(() => { if (!cancel) setLoading(false); });

@@ -181,9 +181,22 @@ export default function BuscadorPage() {
 
   const refreshMisPedidos = useCallback(async () => {
     try {
-      const r = await fetchWithSupabaseSession("/api/buscador/mis-pedidos", { cache: "no-store" });
+      const r = await fetchWithSupabaseSession("/api/pedidos-caja?estado=todos&mios=1", { cache: "no-store" });
       const j = await r.json();
-      if (j?.success) setMisPedidos((j.data?.pedidos ?? []) as MiPedido[]);
+      if (!j?.success) return;
+      const raw = (j.data?.pedidos ?? []) as Array<Record<string, unknown>>;
+      // mapear shape de pedidos_caja → MiPedido (UI)
+      setMisPedidos(raw.map((p) => ({
+        id: String(p.id),
+        titulo: String(p.titulo ?? ""),
+        cliente_nombre: p.cliente_nombre ? String(p.cliente_nombre) : null,
+        total_estimado: Number(p.total_estimado) || 0,
+        items_count: Array.isArray(p.items) ? (p.items as unknown[]).length : 0,
+        estado_facturacion: (p.estado === "facturado" ? "facturado" : "pendiente_caja"),
+        venta_numero: p.venta_numero ? String(p.venta_numero) : null,
+        created_at: p.created_at ? String(p.created_at) : null,
+        facturado_at: p.facturado_at ? String(p.facturado_at) : null,
+      })));
     } catch { /* opcional */ }
   }, []);
 
@@ -237,14 +250,14 @@ export default function BuscadorPage() {
           tipo_precio: it.tipo_precio,
         })),
       };
-      const r = await fetchWithSupabaseSession("/api/buscador/enviar-a-caja", {
+      const r = await fetchWithSupabaseSession("/api/pedidos-caja", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const j = await r.json();
       if (!r.ok || !j?.success) throw new Error(j?.error ?? `Error ${r.status}`);
-      setOkMsg(`Pedido "${j.data.titulo}" enviado a caja.`);
+      setOkMsg(`Pedido "${j.data.pedido.titulo}" enviado a caja.`);
       setCart([]); setClienteId("");
       void refreshMisPedidos();
     } catch (e) {

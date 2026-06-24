@@ -9,6 +9,7 @@ import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta } from "@/lib/ventas/types";
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 import { estaFacturado, marcarFacturado } from "@/lib/caja/facturacion";
+import { marcarPedidoFacturado } from "@/lib/pedidos-caja/server";
 import { getCajaAbiertaPg } from "@/lib/caja/server/caja-pg";
 
 /**
@@ -213,13 +214,13 @@ export async function POST(request: NextRequest) {
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
 
-    // Anti doble facturación: si se factura un pedido, verificar que aún no tenga venta.
+    // Anti doble facturación: si se factura un pedido, verificar que esté pendiente.
     // (Se valida ANTES de crear la venta para no descontar stock por un pedido ya facturado.)
     const sbPedido = pedidoId ? createServiceRoleClientWithDbSchema(schema) : null;
     if (pedidoId && sbPedido) {
       const pq = await sbPedido
-        .from("proyectos")
-        .select("id, metadata")
+        .from("pedidos_caja")
+        .select("id, estado")
         .eq("empresa_id", auth.empresa_id)
         .eq("id", pedidoId)
         .maybeSingle();
@@ -227,8 +228,10 @@ export async function POST(request: NextRequest) {
       if (!pq.data) {
         return NextResponse.json(errorResponse("El pedido a facturar no existe."), { status: 404 });
       }
-      if (estaFacturado((pq.data as { metadata?: unknown }).metadata)) {
-        throw new PedidoYaFacturadoError();
+      const estado = (pq.data as { estado: string }).estado;
+      if (estado === "facturado") throw new PedidoYaFacturadoError();
+      if (estado === "cancelado") {
+        return NextResponse.json(errorResponse("El pedido está cancelado, no se puede facturar."), { status: 409 });
       }
     }
 
@@ -252,29 +255,13 @@ export async function POST(request: NextRequest) {
       cajaId: await resolveCajaAbiertaId(schema, auth.empresa_id),
     });
 
-    // Vincular el pedido facturado con la venta creada (Caja). Trazabilidad:
-    // presupuesto → pedido → venta. Marca el pedido como 'facturado' con venta_id.
+    // Marcar el pedido como facturado (trazabilidad pedido→venta).
     // Best-effort: la venta ya existe; si esto falla, la venta NO se revierte (se loguea).
     if (pedidoId && sbPedido) {
       try {
-        const pq = await sbPedido
-          .from("proyectos")
-          .select("metadata")
-          .eq("empresa_id", auth.empresa_id)
-          .eq("id", pedidoId)
-          .maybeSingle();
-        const metaActual = (pq.data as { metadata?: unknown } | null)?.metadata;
-        const nuevaMeta = marcarFacturado(metaActual, fechaIso, ventaId, numeroControl);
-        const upd = await sbPedido
-          .from("proyectos")
-          .update({ metadata: nuevaMeta, last_activity_at: fechaIso, ultimo_movimiento_at: fechaIso })
-          .eq("empresa_id", auth.empresa_id)
-          .eq("id", pedidoId);
-        if (upd.error) {
-          console.error("[ventas/create] no se pudo marcar pedido facturado:", upd.error.message);
-        }
+        await marcarPedidoFacturado(sbPedido, auth.empresa_id, pedidoId, ventaId, numeroControl);
       } catch (e) {
-        console.error("[ventas/create] link pedido->venta fallo (venta OK):", e instanceof Error ? e.message : e);
+        console.error("[ventas/create] no se pudo marcar pedido facturado (venta OK):", e instanceof Error ? e.message : e);
       }
     }
 
