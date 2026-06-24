@@ -31,6 +31,10 @@ interface ProductoSearchHit {
   codigo_oem: string | null;
   codigo_alternativo: string | null;
   marca_repuesto: string | null;
+  /** Unidades vendidas en los últimos 90 días. 0 si no hubo ventas o si la
+   *  request tenía un query/filtro (en ese caso ordenamos por nombre, no por
+   *  ventas). Sirve al cliente para badges tipo "🔥 Top". */
+  ventas_90d: number;
 }
 
 const DEFAULT_LIMIT = 30;
@@ -111,10 +115,81 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    query = query.order("nombre").limit(limit);
+    // ── Ranking por más vendidos (últimos 90 días) ─────────────────────────
+    // Solo cuando NO hay búsqueda ni filtro por vehículo (modo "browse"). Si
+    // el usuario tipea, ordenamos por nombre para que el match sea predecible.
+    // Mismo patrón que el reporte de rotación: agregamos cantidades del
+    // movimientos_inventario con tipo=SALIDA, origen=venta.
+    let ventasPorProducto: Map<string, number> | null = null;
+    let topIds: string[] = [];
+    if (q.length === 0 && vehiculoRaw.length === 0) {
+      const corte = new Date(Date.now() - 90 * 86400000).toISOString();
+      const movQ = await supabase
+        .from("movimientos_inventario")
+        .select("producto_id, cantidad")
+        .eq("empresa_id", empresaId)
+        .eq("tipo", "SALIDA")
+        .eq("origen", "venta")
+        .gte("fecha", corte)
+        .range(0, 49_999);
+      if (!movQ.error) {
+        ventasPorProducto = new Map();
+        for (const r of ((movQ.data ?? []) as Array<{ producto_id: string; cantidad: number }>)) {
+          const k = String(r.producto_id);
+          ventasPorProducto.set(k, (ventasPorProducto.get(k) ?? 0) + (Number(r.cantidad) || 0));
+        }
+        // IDs de top sellers ordenados desc. Limitado a `limit` para no
+        // pasarnos del tamaño visible del modal.
+        topIds = Array.from(ventasPorProducto.entries())
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, limit)
+          .map(([id]) => id);
+      }
+    }
 
-    const { data, error } = await query;
-    if (error) throw new Error(error.message);
+    // Si hay top sellers, los traemos PRIMERO (sin importar su posición
+    // alfabética) y completamos con el listado alfabético hasta `limit`.
+    type ProdRow = Record<string, unknown>;
+    let rowsAccum: ProdRow[] = [];
+
+    if (topIds.length > 0) {
+      const topQ = await supabase
+        .from("productos")
+        .select(
+          "id, nombre, sku, codigo_barras, codigo_barras_interno, " +
+            "precio_venta, precio_mayorista, precio_distribuidor, costo_promedio, stock_actual, stock_minimo, " +
+            "unidad_medida, metodo_valuacion, imagen_path, imagen_url, " +
+            "categoria_principal_id, proveedor_principal_id, ubicacion_principal_id, " +
+            "es_vendible, controla_stock, modo_receta, activo, " +
+            "codigo_oem, codigo_alternativo, marca_repuesto"
+        )
+        .eq("empresa_id", empresaId)
+        .eq("activo", true)
+        .eq("es_vendible", true)
+        .in("id", topIds);
+      if (topQ.error) throw new Error(topQ.error.message);
+      // Reordenar según topIds (que ya vienen ordenados por cantidad vendida).
+      const byId = new Map<string, ProdRow>();
+      for (const r of (topQ.data ?? []) as unknown as ProdRow[]) byId.set(String(r.id), r);
+      rowsAccum = topIds.map((id) => byId.get(id)).filter(Boolean) as ProdRow[];
+    }
+
+    // Completar con productos alfabéticos hasta llegar a `limit`, excluyendo
+    // los que ya tenemos (para no duplicar).
+    const remaining = limit - rowsAccum.length;
+    if (remaining > 0) {
+      let fillQuery = query.order("nombre").limit(remaining);
+      if (rowsAccum.length > 0) {
+        const excludeIds = rowsAccum.map((r) => String(r.id));
+        // not.in.(uuid1,uuid2,...) — escape de comas no necesario para UUIDs.
+        fillQuery = fillQuery.not("id", "in", `(${excludeIds.join(",")})`);
+      }
+      const fillRes = await fillQuery;
+      if (fillRes.error) throw new Error(fillRes.error.message);
+      rowsAccum = rowsAccum.concat((fillRes.data ?? []) as unknown as ProdRow[]);
+    }
+
+    const data = rowsAccum;
 
     type Row = Record<string, unknown>;
     const rows = ((data ?? []) as unknown as Row[]).map((r) => ({
@@ -175,6 +250,7 @@ export async function GET(request: NextRequest) {
       codigo_oem: r.codigo_oem,
       codigo_alternativo: r.codigo_alternativo,
       marca_repuesto: r.marca_repuesto,
+      ventas_90d: ventasPorProducto?.get(r.id) ?? 0,
     }));
 
     return NextResponse.json(successResponse({ items: hits, count: hits.length, q, vehiculo: vehiculoRaw || null }));

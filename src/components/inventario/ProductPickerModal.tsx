@@ -30,6 +30,9 @@ export interface ProductoPickerItem {
   codigo_oem?: string | null;
   codigo_alternativo?: string | null;
   marca_repuesto?: string | null;
+  /** Unidades vendidas en últimos 90 días (devuelto por el endpoint cuando
+   *  no hay query). Sirve para el badge "🔥 Top". */
+  ventas_90d?: number;
 }
 
 /** Un Menú con produccion_previa maneja stock real del terminado (como reventa para mostrar). */
@@ -269,7 +272,7 @@ export default function ProductPickerModal({
             )}
             {!loading && !error && items.length >= 500 && q.trim().length < 2 && (
               <div className="m-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                Mostrando los primeros 500 productos del catálogo. <strong>Tipeá en el buscador</strong> (nombre, SKU, código OEM…) para encontrar productos específicos.
+                Mostrando 500 productos — los <strong>más vendidos</strong> de los últimos 90 días primero (🔥), luego alfabético. <strong>Tipeá en el buscador</strong> para encontrar otros específicos.
               </div>
             )}
             {!loading && !error && items.length > 0 && (
@@ -303,6 +306,14 @@ export default function ProductPickerModal({
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="font-medium text-slate-800 truncate">
+                          {p.ventas_90d && p.ventas_90d > 0 && (
+                            <span
+                              title={`${p.ventas_90d} unidades vendidas en los últimos 90 días`}
+                              className="mr-2 inline-flex items-center rounded-full bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700"
+                            >
+                              🔥 Top · {p.ventas_90d}
+                            </span>
+                          )}
                           {p.nombre}
                           {p.marca_repuesto && (
                             <span className="ml-2 inline-flex items-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-600">{p.marca_repuesto}</span>
