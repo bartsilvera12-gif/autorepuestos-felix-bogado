@@ -94,7 +94,9 @@ const ALLOWED_MENU_KEYS = new Set<string>([
   "dashboard",
   "clientes",
   "ventas",
-  "pagos",
+  // "pagos" (Cobros) ocultado a pedido del cliente: la cobranza se
+  // gestiona desde Ventas/Caja directamente. Se mantiene "pagos_proveedores"
+  // para registrar lo que se le paga a los proveedores (CxP).
   "pagos_proveedores",
   "gastos",
   "reportes",
