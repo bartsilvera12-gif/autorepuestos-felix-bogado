@@ -43,6 +43,18 @@ interface ProductoRow {
   tiempo_prep_minutos?: number | null;
   descripcion?: string | null;
   modo_receta?: string | null;
+  // Autopartes (Fase 1/2/7)
+  codigo_oem?: string | null;
+  codigo_alternativo?: string | null;
+  marca_repuesto?: string | null;
+  garantia_meses?: number | string | null;
+  permitir_venta_sin_stock?: boolean | null;
+  ubicacion_deposito?: string | null;
+  ubicacion_pasillo?: string | null;
+  ubicacion_estante?: string | null;
+  ubicacion_caja?: string | null;
+  distribuidor_nombre?: string | null;
+  distribuidor_comision_pct?: number | string | null;
 }
 
 interface MovimientoRow {
@@ -96,6 +108,18 @@ function rowToProducto(row: ProductoRow): Producto {
     tiempo_prep_minutos: row.tiempo_prep_minutos != null ? Number(row.tiempo_prep_minutos) : 0,
     descripcion: row.descripcion ?? null,
     modo_receta: row.modo_receta ?? "preparado_al_vender",
+    // Autopartes
+    codigo_oem: row.codigo_oem ?? null,
+    codigo_alternativo: row.codigo_alternativo ?? null,
+    marca_repuesto: row.marca_repuesto ?? null,
+    garantia_meses: row.garantia_meses != null ? Number(row.garantia_meses) : null,
+    permitir_venta_sin_stock: row.permitir_venta_sin_stock ?? false,
+    ubicacion_deposito: row.ubicacion_deposito ?? null,
+    ubicacion_pasillo: row.ubicacion_pasillo ?? null,
+    ubicacion_estante: row.ubicacion_estante ?? null,
+    ubicacion_caja: row.ubicacion_caja ?? null,
+    distribuidor_nombre: row.distribuidor_nombre ?? null,
+    distribuidor_comision_pct: row.distribuidor_comision_pct != null ? Number(row.distribuidor_comision_pct) : null,
   };
 }
 
