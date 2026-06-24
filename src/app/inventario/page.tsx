@@ -62,6 +62,10 @@ export default function InventarioPage() {
   const [tab,              setTab]               = useState<"reventa" | "menu" | "materia">("reventa");
   const [cargandoLista,    setCargandoLista]     = useState(true);
   const [soloStockBajo,    setSoloStockBajo]    = useState(false);
+  // Filtros nuevos auto-parts (visibles arriba del listado).
+  type FiltroStock = "todos" | "sin_stock" | "bajo" | "con_stock";
+  const [filtroStock,       setFiltroStock]       = useState<FiltroStock>("todos");
+  const [filtroDistribuidor, setFiltroDistribuidor] = useState<string>("");
 
   // Paginación client-side. Default 50 (chico, legible, no fríe al browser
   // con 6000 filas). El usuario puede subir a 100 o "todos" si quiere ver
@@ -140,8 +144,20 @@ export default function InventarioPage() {
       if (p.ubicacion_principal_id !== filtroUbicacion) return false;
     }
 
-    // Solo stock bajo
+    // Solo stock bajo (checkbox legacy)
     if (soloStockBajo && p.stock_actual > p.stock_minimo) return false;
+
+    // Filtro nuevo "Estado de stock" (autopartes)
+    if (filtroStock === "sin_stock" && p.stock_actual > 0) return false;
+    if (filtroStock === "con_stock" && p.stock_actual <= 0) return false;
+    if (filtroStock === "bajo" && p.stock_actual > p.stock_minimo) return false;
+
+    // Filtro nuevo "Distribuidor" — match exacto case-insensitive contra
+    // productos.distribuidor_nombre.
+    if (filtroDistribuidor) {
+      const d = (p.distribuidor_nombre ?? "").trim().toUpperCase();
+      if (d !== filtroDistribuidor.trim().toUpperCase()) return false;
+    }
 
     // Tipo gastronómico (vendible/insumo/mixto)
     if (filtroTipo !== "todos") {
@@ -177,14 +193,27 @@ export default function InventarioPage() {
     filtroValuacion,
     filtroUbicacion,
     soloStockBajo,
+    filtroStock,
+    filtroDistribuidor,
     filtroTipo,
     tab,
   ]);
 
+  // Lista única de distribuidores cargados en algún producto (para el dropdown).
+  const distribuidoresDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of todos) {
+      const d = (p.distribuidor_nombre ?? "").trim();
+      if (d) set.add(d);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [todos]);
+
   // Resetear la página actual cuando cambian filtros o tamaño de página.
   useEffect(() => { setPaginaActual(0); }, [
     filtroPorNombre, filtroPorSku, filtroPorCosto, filtroPorPrecio,
-    filtroValuacion, filtroUbicacion, soloStockBajo, filtroTipo, tab, pageSize,
+    filtroValuacion, filtroUbicacion, soloStockBajo, filtroStock,
+    filtroDistribuidor, filtroTipo, tab, pageSize,
   ]);
 
   // Slice paginado para renderizar sólo la página actual (la lista filtrada
@@ -216,6 +245,7 @@ export default function InventarioPage() {
   const hayFiltrosActivos =
     filtroPorNombre || filtroPorSku || filtroPorCosto ||
     filtroPorPrecio || filtroValuacion || filtroUbicacion || soloStockBajo ||
+    filtroStock !== "todos" || filtroDistribuidor ||
     filtroTipo !== "todos";
 
   function limpiarFiltros() {
@@ -223,6 +253,8 @@ export default function InventarioPage() {
     setFiltroPorSku("");
     setFiltroPorCosto("");
     setFiltroPorPrecio("");
+    setFiltroStock("todos");
+    setFiltroDistribuidor("");
     setFiltroValuacion("");
     setFiltroUbicacion("");
     setSoloStockBajo(false);
@@ -298,6 +330,43 @@ export default function InventarioPage() {
               onChange={(e) => setFiltroPorNombre(e.target.value)}
               className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none sm:w-64 sm:flex-none"
             />
+            {/* Filtros auto-parts: estado de stock + distribuidor */}
+            <select
+              value={filtroStock}
+              onChange={(e) => setFiltroStock(e.target.value as FiltroStock)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4FAEB2]/30"
+              title="Estado de stock"
+            >
+              <option value="todos">Stock: todos</option>
+              <option value="con_stock">Con stock (&gt;0)</option>
+              <option value="sin_stock">Sin stock (=0)</option>
+              <option value="bajo">Stock bajo (≤ mín.)</option>
+            </select>
+            <select
+              value={filtroDistribuidor}
+              onChange={(e) => setFiltroDistribuidor(e.target.value)}
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 max-w-[14rem] truncate"
+              title="Distribuidor"
+              disabled={distribuidoresDisponibles.length === 0}
+            >
+              <option value="">
+                {distribuidoresDisponibles.length === 0
+                  ? "Sin distribuidores cargados"
+                  : "Distribuidor: todos"}
+              </option>
+              {distribuidoresDisponibles.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            {(filtroStock !== "todos" || filtroDistribuidor) && (
+              <button
+                type="button"
+                onClick={() => { setFiltroStock("todos"); setFiltroDistribuidor(""); }}
+                className="text-xs text-slate-500 hover:text-slate-800 underline"
+              >
+                Limpiar filtros
+              </button>
+            )}
           </div>
         </div>
 
