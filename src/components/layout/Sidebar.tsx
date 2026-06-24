@@ -181,7 +181,8 @@ const MENU_STRUCTURE: MenuItem[] = [
     icon: Settings,
     children: [
       { label: "Facturación", href: "/configuracion/facturacion" },
-      { label: "Equipos y supervisión", href: "/configuracion/omnicanal-equipos" },
+      // "Equipos y supervisión" oculto en esta instancia — no aplica para
+      // autopartes, era del módulo omnicanal/chat ya retirado del sidebar.
     ],
   },
   { key: "planes", slug: "planes", label: "Planes", href: "/planes", icon: FileText },
