@@ -95,6 +95,28 @@ export default function InventarioPage() {
     return () => { cancelled = true; };
   }, [refreshKey]);
 
+  /**
+   * Soft delete: DELETE /api/productos/[id] marca activo=false. El producto
+   * desaparece del listing (la API filtra por activo=true) pero queda en DB
+   * preservando historial de ventas/compras.
+   */
+  async function eliminarProducto(p: Producto) {
+    const ok = window.confirm(
+      `¿Borrar el producto "${p.nombre}"?\n\n` +
+      `SKU: ${p.sku} · Stock actual: ${p.stock_actual}\n\n` +
+      `Se ocultará del listado. El historial de ventas/compras se conserva.`
+    );
+    if (!ok) return;
+    try {
+      const r = await fetch(`/api/productos/${p.id}`, { method: "DELETE", credentials: "include" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) throw new Error(j?.error ?? `Error ${r.status}`);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      window.alert(e instanceof Error ? e.message : "No se pudo borrar el producto.");
+    }
+  }
+
   // Map se reconstruia en cada render del componente (cualquier setState de
   // filtro): O(N) basura por keystroke. useMemo lo cachea hasta que cambia ubicaciones.
   const ubicacionById = useMemo(
@@ -668,12 +690,21 @@ export default function InventarioPage() {
                       </td>
                     )}
                     <td className="py-4 pl-4 text-center">
-                      <Link
-                        href={`/inventario/${p.id}/editar`}
-                        className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-                      >
-                        Editar
-                      </Link>
+                      <div className="inline-flex items-center gap-1.5">
+                        <Link
+                          href={`/inventario/${p.id}/editar`}
+                          className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                        >
+                          Editar
+                        </Link>
+                        <button
+                          type="button"
+                          onClick={() => eliminarProducto(p)}
+                          className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors"
+                        >
+                          Borrar
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );

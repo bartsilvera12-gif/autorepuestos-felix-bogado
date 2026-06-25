@@ -78,6 +78,36 @@ export async function GET(
   }
 }
 
+/**
+ * DELETE /api/productos/[id] — soft delete (activo=false).
+ *
+ * No borra físicamente: el producto puede tener ventas/compras/movimientos
+ * con FK que romperían el delete. activo=false lo saca del listing
+ * (/api/productos filtra por activo=true) preservando historial.
+ */
+export async function DELETE(
+  request: NextRequest,
+  ctxParams: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await ctxParams.params;
+    if (!id) return NextResponse.json(errorResponse("id obligatorio"), { status: 400 });
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+
+    const upd = await ctx.supabase
+      .from("productos")
+      .update({ activo: false })
+      .eq("empresa_id", ctx.auth.empresa_id)
+      .eq("id", id);
+    if (upd.error) return NextResponse.json(errorResponse(upd.error.message), { status: 400 });
+    return NextResponse.json(successResponse({ ok: true }));
+  } catch (err) {
+    console.error("[/api/productos/[id] DELETE]", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo eliminar el producto."), { status: 500 });
+  }
+}
+
 export async function PATCH(
   request: NextRequest,
   ctxParams: { params: Promise<{ id: string }> }
