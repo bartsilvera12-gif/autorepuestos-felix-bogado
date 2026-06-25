@@ -79,42 +79,50 @@ export default function PedidosPendientesCaja() {
         </h2>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[680px] text-left text-sm">
+        <table className="w-full text-left text-sm">
           <thead className="text-xs uppercase text-amber-700/80">
             <tr>
-              <th className="py-2 pr-4 font-medium">Pedido</th>
-              <th className="py-2 pr-4 font-medium">Cliente</th>
-              <th className="py-2 pr-4 font-medium">Items</th>
-              <th className="py-2 pr-4 font-medium text-right">Total estimado</th>
-              <th className="py-2 pr-4 font-medium">Origen</th>
-              <th className="py-2 pr-4 font-medium">Fecha</th>
+              <th className="py-2 pr-3 sm:pr-4 font-medium">Pedido</th>
+              <th className="py-2 pr-3 sm:pr-4 font-medium hidden md:table-cell">Cliente</th>
+              <th className="py-2 pr-3 sm:pr-4 font-medium hidden lg:table-cell">Items</th>
+              <th className="py-2 pr-3 sm:pr-4 font-medium text-right">Total</th>
+              <th className="py-2 pr-3 sm:pr-4 font-medium hidden md:table-cell">Origen</th>
+              <th className="py-2 pr-3 sm:pr-4 font-medium hidden lg:table-cell">Fecha</th>
               <th className="py-2 pr-2 font-medium text-right">Acción</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-amber-100">
             {pedidos.map((p) => (
               <tr key={p.id} className="align-middle">
-                <td className="py-2.5 pr-4 font-medium text-slate-800">{p.titulo || "Pedido"}</td>
-                <td className="py-2.5 pr-4 text-slate-600">{p.cliente_nombre ?? "—"}</td>
-                <td className="py-2.5 pr-4 text-slate-600">
+                <td className="py-2.5 pr-3 sm:pr-4 font-medium text-slate-800">
+                  <div>{p.titulo || "Pedido"}</div>
+                  {/* mobile: meto cliente+items abajo del título */}
+                  <div className="md:hidden mt-0.5 text-xs text-slate-500 truncate">
+                    {p.cliente_nombre ?? "—"}
+                    {p.items.length > 0 && ` · ${p.items.length} item${p.items.length === 1 ? "" : "s"}`}
+                  </div>
+                </td>
+                <td className="py-2.5 pr-3 sm:pr-4 text-slate-600 hidden md:table-cell">{p.cliente_nombre ?? "—"}</td>
+                <td className="py-2.5 pr-3 sm:pr-4 text-slate-600 hidden lg:table-cell">
                   {p.items.length === 0
                     ? "—"
                     : p.items.slice(0, 2).map((it) => `${it.cantidad}× ${it.producto_nombre}`).join(", ") +
                       (p.items.length > 2 ? ` +${p.items.length - 2}` : "")}
                 </td>
-                <td className="py-2.5 pr-4 text-right tabular-nums font-semibold text-slate-800">{fmtGs(p.total_estimado)}</td>
-                <td className="py-2.5 pr-4">
+                <td className="py-2.5 pr-3 sm:pr-4 text-right tabular-nums font-semibold text-slate-800">{fmtGs(p.total_estimado)}</td>
+                <td className="py-2.5 pr-3 sm:pr-4 hidden md:table-cell">
                   <span className="rounded-full bg-white px-2 py-0.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200">
                     {ORIGEN_LABEL[p.origen] ?? p.origen}
                   </span>
                 </td>
-                <td className="py-2.5 pr-4 text-slate-500">{fmtFecha(p.fecha)}</td>
+                <td className="py-2.5 pr-3 sm:pr-4 text-slate-500 hidden lg:table-cell">{fmtFecha(p.fecha)}</td>
                 <td className="py-2.5 pr-2 text-right">
                   <Link
                     href={`/ventas/nueva?pedido_id=${p.id}`}
-                    className="inline-flex items-center rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91]"
+                    className="inline-flex items-center rounded-lg bg-[#4FAEB2] px-2 sm:px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#3F8E91] whitespace-nowrap"
                   >
-                    Facturar / Cobrar
+                    <span className="sm:hidden">Cobrar</span>
+                    <span className="hidden sm:inline">Facturar / Cobrar</span>
                   </Link>
                 </td>
               </tr>

@@ -393,7 +393,7 @@ export default function BuscadorPage() {
         </div>
 
         {/* COLUMNA DERECHA: Carrito + enviar */}
-        <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm h-fit sticky top-4">
+        <aside className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm h-fit lg:sticky lg:top-4">
           <h2 className="text-sm font-semibold text-slate-900">Pedido a armar</h2>
           <p className="text-xs text-slate-500">Cuando termines, lo mandás a caja para que se cobre.</p>
 
@@ -496,13 +496,13 @@ export default function BuscadorPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
-                <th className="px-4 py-2.5 text-left">Pedido</th>
-                <th className="px-4 py-2.5 text-left">Cliente</th>
-                <th className="px-4 py-2.5 text-right">Items</th>
-                <th className="px-4 py-2.5 text-right">Total</th>
-                <th className="px-4 py-2.5 text-left">Estado</th>
-                <th className="px-4 py-2.5 text-left">Fecha</th>
-                <th className="px-4 py-2.5 text-right">Acción</th>
+                <th className="px-3 sm:px-4 py-2.5 text-left">Pedido</th>
+                <th className="px-3 sm:px-4 py-2.5 text-left hidden md:table-cell">Cliente</th>
+                <th className="px-3 sm:px-4 py-2.5 text-right hidden sm:table-cell">Items</th>
+                <th className="px-3 sm:px-4 py-2.5 text-right">Total</th>
+                <th className="px-3 sm:px-4 py-2.5 text-left">Estado</th>
+                <th className="px-3 sm:px-4 py-2.5 text-left hidden md:table-cell">Fecha</th>
+                <th className="px-3 sm:px-4 py-2.5 text-right">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -510,11 +510,15 @@ export default function BuscadorPage() {
                 <tr><td colSpan={7} className="py-8 text-center text-sm text-slate-400">Todavía no enviaste ningún pedido.</td></tr>
               ) : misPedidos.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50">
-                  <td className="px-4 py-2.5 font-medium text-slate-800">{p.titulo}</td>
-                  <td className="px-4 py-2.5 text-slate-600">{p.cliente_nombre ?? "—"}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums text-slate-700">{p.items_count}</td>
-                  <td className="px-4 py-2.5 text-right tabular-nums font-semibold text-slate-900">{fmtGs(p.total_estimado)}</td>
-                  <td className="px-4 py-2.5">
+                  <td className="px-3 sm:px-4 py-2.5 font-medium text-slate-800">
+                    <div>{p.titulo}</div>
+                    {/* Mobile: meto cliente debajo del pedido (en md+ va en su propia col) */}
+                    {p.cliente_nombre && <div className="md:hidden mt-0.5 text-xs text-slate-500">{p.cliente_nombre}</div>}
+                  </td>
+                  <td className="px-3 sm:px-4 py-2.5 text-slate-600 hidden md:table-cell">{p.cliente_nombre ?? "—"}</td>
+                  <td className="px-3 sm:px-4 py-2.5 text-right tabular-nums text-slate-700 hidden sm:table-cell">{p.items_count}</td>
+                  <td className="px-3 sm:px-4 py-2.5 text-right tabular-nums font-semibold text-slate-900">{fmtGs(p.total_estimado)}</td>
+                  <td className="px-3 sm:px-4 py-2.5">
                     {p.estado_facturacion === "facturado" ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                         <CheckCircle2 className="h-3 w-3" />
@@ -532,8 +536,8 @@ export default function BuscadorPage() {
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-2.5 text-xs text-slate-500">{fmtFecha(p.created_at)}</td>
-                  <td className="px-4 py-2.5 text-right">
+                  <td className="px-3 sm:px-4 py-2.5 text-xs text-slate-500 hidden md:table-cell">{fmtFecha(p.created_at)}</td>
+                  <td className="px-3 sm:px-4 py-2.5 text-right">
                     {p.estado_facturacion === "pendiente_caja" ? (
                       <button
                         type="button"
