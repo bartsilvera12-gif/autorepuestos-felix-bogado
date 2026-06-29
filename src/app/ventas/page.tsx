@@ -150,6 +150,36 @@ export default function VentasPage() {
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
   const [cargandoLista, setCargandoLista] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Anulación de venta
+  const [anularTarget, setAnularTarget] = useState<Venta | null>(null);
+  const [anularMotivo, setAnularMotivo] = useState("");
+  const [anularLoading, setAnularLoading] = useState(false);
+  const [anularError, setAnularError] = useState<string | null>(null);
+
+  async function confirmarAnulacion() {
+    if (!anularTarget) return;
+    const motivo = anularMotivo.trim();
+    if (motivo.length < 3) { setAnularError("El motivo es obligatorio (mínimo 3 caracteres)."); return; }
+    setAnularLoading(true); setAnularError(null);
+    try {
+      const r = await fetch(`/api/ventas/${anularTarget.id}/anular`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) throw new Error(j?.error ?? `Error ${r.status}`);
+      setAnularTarget(null); setAnularMotivo("");
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setAnularError(e instanceof Error ? e.message : "No se pudo anular la venta.");
+    } finally {
+      setAnularLoading(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -168,7 +198,7 @@ export default function VentasPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [refreshKey]);
 
   const metricas = calcularMetricas(todas);
 
@@ -398,28 +428,42 @@ export default function VentasPage() {
                         {formatFecha(v.fecha)}
                       </td>
                       <td className="py-4 text-center align-middle">
-                        <div className="inline-flex items-center gap-1.5">
-                          <a
-                            href={`/api/ventas/${v.id}/ticket?mode=comandas`}
-                            target="_blank"
-                            rel="noopener"
-                            className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
-                            title="Abrir comandas + ticket cliente"
-                          >
-                            Imprimir
-                          </a>
-                          {v.genera_nota_remision && (
+                        {v.estado === "anulada" ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-xs font-medium text-red-700 ring-1 ring-red-200">
+                            Anulada
+                          </span>
+                        ) : (
+                          <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
                             <a
-                              href={`/api/ventas/${v.id}/ticket?tipo=remision`}
+                              href={`/api/ventas/${v.id}/ticket?mode=comandas`}
                               target="_blank"
                               rel="noopener"
-                              className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
-                              title="Nota de remisión (documento no fiscal)"
+                              className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                              title="Abrir comandas + ticket cliente"
                             >
-                              Nota de remisión
+                              Imprimir
                             </a>
-                          )}
-                        </div>
+                            {v.genera_nota_remision && (
+                              <a
+                                href={`/api/ventas/${v.id}/ticket?tipo=remision`}
+                                target="_blank"
+                                rel="noopener"
+                                className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
+                                title="Nota de remisión (documento no fiscal)"
+                              >
+                                Nota remisión
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => { setAnularTarget(v); setAnularMotivo(""); setAnularError(null); }}
+                              className="inline-flex items-center justify-center rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors"
+                              title="Anular venta (reversa stock y caja)"
+                            >
+                              Anular
+                            </button>
+                          </div>
+                        )}
                       </td>
                     </tr>
                   );
@@ -433,6 +477,59 @@ export default function VentasPage() {
 
       {/* FAB mobile: acceso 1-tap a "+ Nueva venta" desde cualquier scroll position */}
       <MobileFab href="/ventas/nueva" label="Nueva venta" />
+
+      {anularTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!anularLoading) { setAnularTarget(null); setAnularError(null); } }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Anular venta {anularTarget.numero_control}</h3>
+              <p className="mt-1 text-sm text-slate-600">
+                Total: <strong>Gs. {Math.round(anularTarget.total).toLocaleString("es-PY")}</strong>
+              </p>
+              <p className="mt-2 text-xs text-slate-500">
+                Se revertirá el stock de cada producto y, si la caja del turno sigue abierta, se descontará el monto cobrado.
+              </p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">Motivo de la anulación *</label>
+              <textarea
+                value={anularMotivo}
+                onChange={(e) => setAnularMotivo(e.target.value)}
+                placeholder="Ej. Error de carga, cliente devolvió, producto roto…"
+                rows={3}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500/30"
+              />
+            </div>
+            {anularError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{anularError}</p>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { if (!anularLoading) { setAnularTarget(null); setAnularError(null); } }}
+                disabled={anularLoading}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={confirmarAnulacion}
+                disabled={anularLoading || anularMotivo.trim().length < 3}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {anularLoading ? "Anulando…" : "Sí, anular venta"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
