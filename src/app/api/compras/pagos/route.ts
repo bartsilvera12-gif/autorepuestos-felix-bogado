@@ -80,12 +80,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("método de pago inválido."), { status: 400 });
     }
 
-    // Confirmar que el documento (numero_control) existe en compras de esta empresa.
+    // Confirmar que el documento (numero_control) existe en compras de esta
+    // empresa y NO está anulado.
     const docCheck = await supabase
       .from("compras")
-      .select("numero_control, proveedor_id, proveedor_nombre", { count: "exact", head: false })
+      .select("numero_control, proveedor_id, proveedor_nombre, estado", { count: "exact", head: false })
       .eq("empresa_id", auth.empresa_id)
       .eq("numero_control", numeroControl)
+      .neq("estado", "anulada")
       .limit(1);
     if (docCheck.error) throw new Error(docCheck.error.message);
     const docRow = (docCheck.data ?? [])[0] as

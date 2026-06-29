@@ -54,8 +54,9 @@ export async function GET(request: NextRequest) {
     for (let offset = 0; offset < MAX_ROWS; offset += CHUNK) {
       const r = await supabase
         .from("compras")
-        .select("numero_control, proveedor_id, proveedor_nombre, fecha, total")
+        .select("numero_control, proveedor_id, proveedor_nombre, fecha, total, estado")
         .eq("empresa_id", empresaId)
+        .neq("estado", "anulada")
         .not("numero_control", "is", null)
         .range(offset, offset + CHUNK - 1);
       if (r.error) throw new Error(r.error.message);

@@ -240,11 +240,11 @@ export async function GET(request: NextRequest) {
       return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
     };
     const buildVentasQ = () => {
-      const base = supabase.from("ventas").select("*").eq("empresa_id", empresaId);
+      const base = supabase.from("ventas").select("*").eq("empresa_id", empresaId).neq("estado", "anulada");
       return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
     };
     const buildComprasQ = () => {
-      const base = supabase.from("compras").select("*").eq("empresa_id", empresaId);
+      const base = supabase.from("compras").select("*").eq("empresa_id", empresaId).neq("estado", "anulada");
       return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
     };
     const buildGastosQ = () => {
