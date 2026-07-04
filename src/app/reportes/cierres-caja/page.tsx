@@ -6,7 +6,7 @@
  * Reutiliza /api/caja/historial (ya devuelve CajaResumen[]).
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";

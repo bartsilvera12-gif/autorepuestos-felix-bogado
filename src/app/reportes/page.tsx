@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Archive, HandCoins, BookOpen, TrendingUp, ClipboardCheck } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Archive, HandCoins, BookOpen, ClipboardCheck } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -95,15 +95,6 @@ export default function ReportesPage() {
             icon={ClipboardCheck}
             description="Historial de cajas cerradas con diferencias de arqueo, ventas por método y quién abrió/cerró."
             href="/reportes/cierres-caja"
-          />
-        </li>
-        <li>
-          <ReportCard
-            title="Ganancias por semana"
-            subtitle="Facturación y margen bruto"
-            icon={TrendingUp}
-            description="Ventas agrupadas por semana ISO con margen bruto (facturado − costo). Vista de tendencia."
-            href="/reportes/ganancias-semanales"
           />
         </li>
       </ul>
