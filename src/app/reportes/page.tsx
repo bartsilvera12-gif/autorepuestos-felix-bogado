@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Archive, HandCoins } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Archive, HandCoins, BookOpen, TrendingUp, ClipboardCheck } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -77,6 +77,33 @@ export default function ReportesPage() {
             icon={HandCoins}
             description="Resumen de deuda total agrupada por proveedor con desglose por antigüedad (0-30 / 31-60 / 61-90 / +90 días)."
             href="/reportes/cuentas-por-pagar"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Kardex de producto"
+            subtitle="Historial de movimientos"
+            icon={BookOpen}
+            description="Cronológico completo de entradas y salidas de un producto, con saldo acumulado. Kardex clásico."
+            href="/reportes/kardex"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Cierres de caja"
+            subtitle="Turnos cerrados · arqueo"
+            icon={ClipboardCheck}
+            description="Historial de cajas cerradas con diferencias de arqueo, ventas por método y quién abrió/cerró."
+            href="/reportes/cierres-caja"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Ganancias por semana"
+            subtitle="Facturación y margen bruto"
+            icon={TrendingUp}
+            description="Ventas agrupadas por semana ISO con margen bruto (facturado − costo). Vista de tendencia."
+            href="/reportes/ganancias-semanales"
           />
         </li>
       </ul>
