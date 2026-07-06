@@ -41,6 +41,7 @@ export default function CajaControlPanel({
   const [caja, setCaja] = useState<Caja | null>(null);
   const [resumen, setResumen] = useState<CajaResumen | null>(null);
   const [modal, setModal] = useState<ModalKind>(null);
+  const [verMovs, setVerMovs] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -113,6 +114,71 @@ export default function CajaControlPanel({
               <Stat label="Ingresos efvo." value={formatGs(resumen.ingresos_efectivo)} />
               <Stat label="Egresos efvo." value={formatGs(resumen.egresos_efectivo)} />
               <Stat label="Retiros efvo." value={formatGs(resumen.retiros_efectivo)} />
+            </div>
+          )}
+
+          {/* Detalle de movimientos manuales (ingresos/egresos/retiros/ajustes). */}
+          {resumen && resumen.movimientos.length > 0 && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setVerMovs((v) => !v)}
+                className="text-xs font-semibold text-emerald-800 hover:text-emerald-900 underline underline-offset-2"
+              >
+                {verMovs ? "Ocultar" : "Ver"} movimientos ({resumen.movimientos.length})
+              </button>
+
+              {verMovs && (
+                <div className="mt-2 rounded-lg border border-emerald-200/60 bg-white/70 overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="bg-emerald-50/60 text-emerald-800">
+                        <tr>
+                          <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wide">Hora</th>
+                          <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wide">Tipo</th>
+                          <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wide">Concepto</th>
+                          <th className="px-3 py-1.5 text-left font-semibold uppercase tracking-wide hidden sm:table-cell">Medio</th>
+                          <th className="px-3 py-1.5 text-right font-semibold uppercase tracking-wide">Monto</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-emerald-100">
+                        {resumen.movimientos.slice().reverse().map((m) => {
+                          const tipoBadge =
+                            m.tipo === "ingreso" ? "bg-emerald-100 text-emerald-800" :
+                            m.tipo === "egreso"  ? "bg-rose-100 text-rose-800" :
+                            m.tipo === "retiro"  ? "bg-amber-100 text-amber-800" :
+                                                    "bg-slate-100 text-slate-700";
+                          return (
+                            <tr key={m.id} className="hover:bg-emerald-50/30">
+                              <td className="px-3 py-2 whitespace-nowrap text-slate-500 tabular-nums">
+                                {new Date(m.created_at).toLocaleTimeString("es-PY", { hour: "2-digit", minute: "2-digit" })}
+                              </td>
+                              <td className="px-3 py-2">
+                                <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${tipoBadge}`}>
+                                  {m.tipo}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-slate-700">
+                                <div className="font-medium">{m.concepto}</div>
+                                {m.observacion && <div className="text-[11px] text-slate-500">{m.observacion}</div>}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600 capitalize hidden sm:table-cell">{m.medio_pago}</td>
+                              <td className={`px-3 py-2 text-right tabular-nums font-semibold ${
+                                m.tipo === "ingreso" ? "text-emerald-700" :
+                                m.tipo === "egreso" || m.tipo === "retiro" ? "text-rose-700" :
+                                "text-slate-700"
+                              }`}>
+                                {m.tipo === "egreso" || m.tipo === "retiro" ? "−" : m.tipo === "ingreso" ? "+" : ""}
+                                {formatGs(m.monto)}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
