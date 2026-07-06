@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { getGastos, deleteGasto } from "@/lib/gastos/actions";
 import type { Gasto } from "@/lib/gastos/actions";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 function formatGs(valor: number) {
   return `${valor.toLocaleString("es-PY")} ₲`;
@@ -32,7 +33,6 @@ export default function GastosPage() {
   const router = useRouter();
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [cargando, setCargando] = useState(true);
-  const [eliminando, setEliminando] = useState<string | null>(null);
 
   useEffect(() => {
     getGastos()
@@ -41,16 +41,22 @@ export default function GastosPage() {
       .finally(() => setCargando(false));
   }, []);
 
-  async function handleEliminar(g: Gasto) {
-    if (!confirm(`¿Eliminar el gasto "${g.descripcion || g.categoria || "sin descripción"}"?`)) return;
-    setEliminando(g.id);
+  // Eliminar con modal integrado
+  const [borrarTarget, setBorrarTarget] = useState<Gasto | null>(null);
+  const [borrarLoading, setBorrarLoading] = useState(false);
+  const [borrarError, setBorrarError] = useState<string | null>(null);
+
+  async function confirmarEliminacion() {
+    if (!borrarTarget) return;
+    setBorrarLoading(true); setBorrarError(null);
     try {
-      await deleteGasto(g.id);
-      setGastos((prev) => prev.filter((x) => x.id !== g.id));
-    } catch {
-      setEliminando(null);
+      await deleteGasto(borrarTarget.id);
+      setGastos((prev) => prev.filter((x) => x.id !== borrarTarget.id));
+      setBorrarTarget(null);
+    } catch (e) {
+      setBorrarError(e instanceof Error ? e.message : "No se pudo eliminar el gasto.");
     } finally {
-      setEliminando(null);
+      setBorrarLoading(false);
     }
   }
 
@@ -136,20 +142,19 @@ export default function GastosPage() {
                     </span>
                   </td>
                   <td className="px-5 py-3.5">
-                    <div className="flex gap-2">
+                    <div className="inline-flex items-center gap-1.5">
                       <Link
                         href={`/gastos/${g.id}/editar`}
-                        className="inline-flex items-center min-h-[40px] text-xs text-gray-500 hover:text-gray-800 underline"
+                        className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
                       >
                         Editar
                       </Link>
                       <button
                         type="button"
-                        onClick={() => handleEliminar(g)}
-                        disabled={eliminando === g.id}
-                        className="inline-flex items-center min-h-[40px] text-xs text-red-500 hover:text-red-700 underline disabled:opacity-50"
+                        onClick={() => { setBorrarTarget(g); setBorrarError(null); }}
+                        className="inline-flex items-center justify-center min-h-[40px] rounded-md border border-red-200 bg-white px-3 py-1.5 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors"
                       >
-                        {eliminando === g.id ? "…" : "Eliminar"}
+                        Borrar
                       </button>
                     </div>
                   </td>
@@ -166,6 +171,21 @@ export default function GastosPage() {
           <span className="font-semibold text-gray-800">{gastos.length}</span> gastos
         </p>
       )}
+
+      <ConfirmModal
+        open={borrarTarget != null}
+        title="Eliminar gasto"
+        message={borrarTarget
+          ? `¿Eliminar "${borrarTarget.categoria || borrarTarget.descripcion || "gasto sin descripción"}"?\n\nMonto: Gs. ${borrarTarget.monto.toLocaleString("es-PY")}\nFecha: ${formatFecha(borrarTarget.fecha)}`
+          : ""}
+        hint={borrarError ?? "Esta acción no se puede deshacer."}
+        confirmLabel="Sí, eliminar"
+        cancelLabel="Volver"
+        variant="danger"
+        loading={borrarLoading}
+        onConfirm={confirmarEliminacion}
+        onClose={() => { if (!borrarLoading) { setBorrarTarget(null); setBorrarError(null); } }}
+      />
     </div>
   );
 }
