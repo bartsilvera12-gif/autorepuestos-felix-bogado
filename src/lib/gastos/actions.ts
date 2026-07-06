@@ -83,56 +83,44 @@ export async function getGastosMesActual(): Promise<Gasto[]> {
 
 export async function createGasto(input: GastoInput): Promise<Gasto> {
   if (input.monto <= 0) throw new Error("El monto debe ser mayor a 0");
-
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  const empresa_id = await getEmpresaId();
-
-  const { data, error } = await supabase
-    .from("gastos")
-    .insert({
-      empresa_id,
-      categoria: input.categoria.trim() || null,
-      descripcion: input.descripcion.trim() || null,
+  const res = await fetchWithSupabaseSession("/api/gastos", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      categoria: input.categoria.trim(),
+      descripcion: input.descripcion.trim(),
       monto: input.monto,
       tipo: input.tipo,
       recurrente: input.recurrente,
-      frecuencia: input.frecuencia?.trim() || null,
+      frecuencia: input.frecuencia?.trim() ?? "",
       fecha: input.fecha,
-    })
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return mapRow(data as Record<string, unknown>);
+    }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !(j as { success?: boolean }).success) {
+    throw new Error((j as { error?: string }).error ?? `Error ${res.status}`);
+  }
+  return mapRow((j as { data: Record<string, unknown> }).data);
 }
 
 export async function updateGasto(id: string, input: Partial<GastoInput>): Promise<Gasto> {
   if (input.monto !== undefined && input.monto <= 0) throw new Error("El monto debe ser mayor a 0");
-
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  const update: Record<string, unknown> = {};
-  if (input.categoria !== undefined) update.categoria = input.categoria.trim() || null;
-  if (input.descripcion !== undefined) update.descripcion = input.descripcion.trim() || null;
-  if (input.monto !== undefined) update.monto = input.monto;
-  if (input.tipo !== undefined) update.tipo = input.tipo;
-  if (input.recurrente !== undefined) update.recurrente = input.recurrente;
-  if (input.frecuencia !== undefined) update.frecuencia = input.frecuencia?.trim() || null;
-  if (input.fecha !== undefined) update.fecha = input.fecha;
-
-  const { data, error } = await supabase
-    .from("gastos")
-    .update(update)
-    .eq("id", id)
-    .select()
-    .single();
-
-  if (error) throw new Error(error.message);
-  return mapRow(data as Record<string, unknown>);
+  const res = await fetchWithSupabaseSession(`/api/gastos/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !(j as { success?: boolean }).success) {
+    throw new Error((j as { error?: string }).error ?? `Error ${res.status}`);
+  }
+  return mapRow((j as { data: Record<string, unknown> }).data);
 }
 
 export async function deleteGasto(id: string): Promise<void> {
-  const supabase = await getBrowserSupabaseForEmpresaData();
-  const { error } = await supabase.from("gastos").delete().eq("id", id);
-
-  if (error) throw new Error(error.message);
+  const res = await fetchWithSupabaseSession(`/api/gastos/${id}`, { method: "DELETE" });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !(j as { success?: boolean }).success) {
+    throw new Error((j as { error?: string }).error ?? `Error ${res.status}`);
+  }
 }
