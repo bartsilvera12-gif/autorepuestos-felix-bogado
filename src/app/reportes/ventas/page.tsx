@@ -48,18 +48,51 @@ export default function VentasReportePage() {
   const [cargando, setCargando] = useState(true);
   const [vista, setVista] = useState<"detalle" | "semana">("detalle");
 
-  // Agrupación por semana ISO — client-side sobre data.ventas.
-  const porSemana = useMemo(() => {
+  // Agrupación por semana ISO — client-side sobre data.ventas + data.items.
+  // Además del resumen (ventas, total), incluye el desglose de productos
+  // vendidos en esa semana para el detalle expandible.
+  type SemanaRow = {
+    key: string; label: string; start: string; end: string;
+    ventas: number; total: number;
+    productos: Array<{ nombre: string; cantidad: number; total: number }>;
+  };
+  const porSemana = useMemo<SemanaRow[]>(() => {
     if (!data?.ventas || data.ventas.length === 0) return [];
-    const map = new Map<string, { key: string; label: string; start: string; end: string; ventas: number; total: number }>();
+    // Resumen por semana desde ventas (cantidad + total).
+    const map = new Map<string, {
+      key: string; label: string; start: string; end: string;
+      ventas: number; total: number; prodMap: Map<string, { cantidad: number; total: number }>;
+    }>();
     for (const v of data.ventas) {
       const w = isoWeekKey(v.fecha);
-      const ex = map.get(w.key);
-      if (ex) { ex.ventas += 1; ex.total += Number(v.total) || 0; }
-      else map.set(w.key, { ...w, ventas: 1, total: Number(v.total) || 0 });
+      let ex = map.get(w.key);
+      if (!ex) { ex = { ...w, ventas: 0, total: 0, prodMap: new Map() }; map.set(w.key, ex); }
+      ex.ventas += 1;
+      ex.total += Number(v.total) || 0;
     }
-    return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+    // Desglose por producto desde items.
+    for (const it of (data.items ?? [])) {
+      const w = isoWeekKey(it.fecha);
+      const ex = map.get(w.key);
+      if (!ex) continue;
+      const nombre = it.producto_nombre;
+      const prev = ex.prodMap.get(nombre) ?? { cantidad: 0, total: 0 };
+      prev.cantidad += Number(it.cantidad) || 0;
+      prev.total += Number(it.total_linea) || 0;
+      ex.prodMap.set(nombre, prev);
+    }
+    return [...map.values()]
+      .sort((a, b) => a.key.localeCompare(b.key))
+      .map((s) => ({
+        key: s.key, label: s.label, start: s.start, end: s.end,
+        ventas: s.ventas, total: s.total,
+        productos: [...s.prodMap.entries()]
+          .map(([nombre, v]) => ({ nombre, ...v }))
+          .sort((a, b) => b.total - a.total),
+      }));
   }, [data]);
+
+  const [semanaAbierta, setSemanaAbierta] = useState<string | null>(null);
 
   useEffect(() => {
     let cancel = false;
@@ -138,27 +171,58 @@ export default function VentasReportePage() {
             {data.ventas.length === 0 ? (
               <p className="text-sm text-slate-400">No hay ventas en el período.</p>
             ) : vista === "semana" ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
-                  <thead>
-                    <tr className="border-b text-slate-500">
-                      <th className="py-2.5 pr-4 font-medium">Semana</th>
-                      <th className="py-2.5 pr-4 font-medium">Rango</th>
-                      <th className="py-2.5 pr-4 font-medium text-right">Cant. ventas</th>
-                      <th className="py-2.5 font-medium text-right">Total facturado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {porSemana.map((s) => (
-                      <tr key={s.key} className="border-b border-slate-100 last:border-0">
-                        <td className="py-3 pr-4 font-medium text-slate-800">{s.label}</td>
-                        <td className="py-3 pr-4 text-xs text-slate-500 tabular-nums">{s.start} – {s.end}</td>
-                        <td className="py-3 pr-4 text-right tabular-nums text-slate-700">{s.ventas}</td>
-                        <td className="py-3 text-right tabular-nums font-semibold text-slate-800">{formatGs(s.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="space-y-3">
+                {porSemana.map((s) => {
+                  const abierta = semanaAbierta === s.key;
+                  return (
+                    <div key={s.key} className="rounded-lg border border-slate-200 overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setSemanaAbierta(abierta ? null : s.key)}
+                        className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${abierta ? "bg-slate-50" : "hover:bg-slate-50"}`}
+                      >
+                        <div className="flex items-baseline gap-3 flex-wrap min-w-0">
+                          <span className="font-semibold text-slate-900">{s.label}</span>
+                          <span className="text-xs text-slate-500 tabular-nums">{s.start} – {s.end}</span>
+                          <span className="text-xs text-slate-400">·</span>
+                          <span className="text-xs text-slate-600">{s.ventas} venta{s.ventas === 1 ? "" : "s"}</span>
+                          <span className="text-xs text-slate-400">·</span>
+                          <span className="text-xs text-slate-500">{s.productos.length} producto{s.productos.length === 1 ? "" : "s"}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="tabular-nums font-bold text-slate-900">{formatGs(s.total)}</span>
+                          <span className={`transition-transform text-slate-400 ${abierta ? "rotate-180" : ""}`}>▾</span>
+                        </div>
+                      </button>
+                      {abierta && (
+                        <div className="border-t border-slate-200 bg-white overflow-x-auto">
+                          {s.productos.length === 0 ? (
+                            <p className="px-4 py-3 text-sm text-slate-400">Sin items en la semana.</p>
+                          ) : (
+                            <table className="w-full text-left text-sm">
+                              <thead className="bg-slate-50">
+                                <tr className="text-slate-500">
+                                  <th className="py-2 px-4 font-medium text-xs uppercase tracking-wide">Producto</th>
+                                  <th className="py-2 px-4 font-medium text-right text-xs uppercase tracking-wide">Cantidad</th>
+                                  <th className="py-2 px-4 font-medium text-right text-xs uppercase tracking-wide">Total</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {s.productos.map((p) => (
+                                  <tr key={p.nombre} className="hover:bg-slate-50">
+                                    <td className="py-2 px-4 text-slate-800">{p.nombre}</td>
+                                    <td className="py-2 px-4 text-right tabular-nums text-slate-700">{p.cantidad.toLocaleString("es-PY")}</td>
+                                    <td className="py-2 px-4 text-right tabular-nums font-semibold text-slate-800">{formatGs(p.total)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             ) : (
               <div className="overflow-x-auto">
