@@ -6,7 +6,6 @@ import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
-import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getClientes, clienteNombre } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
@@ -292,19 +291,28 @@ export default function ClientesPage() {
   const [filasTipoCatalogo, setFilasTipoCatalogo] = useState<ClienteTipoServicioRow[]>(() => filasTiposDesdeSistemaEstatico());
   const [refreshKey, setRefreshKey] = useState(0);
 
-  // Borrado (soft delete via DELETE /api/clientes/[id])
+  // Borrado (DELETE /api/clientes/[id] — requiere deletion_reason)
   const [borrarTarget, setBorrarTarget] = useState<Cliente | null>(null);
+  const [borrarMotivo, setBorrarMotivo] = useState("");
   const [borrarLoading, setBorrarLoading] = useState(false);
   const [borrarError, setBorrarError] = useState<string | null>(null);
 
   async function confirmarBorradoCliente() {
     if (!borrarTarget) return;
+    const motivo = borrarMotivo.trim();
+    if (motivo.length < 3) { setBorrarError("El motivo es obligatorio (mínimo 3 caracteres)."); return; }
     setBorrarLoading(true); setBorrarError(null);
     try {
-      const r = await fetch(`/api/clientes/${borrarTarget.id}`, { method: "DELETE", credentials: "include" });
+      const r = await fetch(`/api/clientes/${borrarTarget.id}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deletion_reason: motivo }),
+      });
       const j = await r.json().catch(() => ({}));
       if (!r.ok || !j?.success) throw new Error(j?.error ?? `Error ${r.status}`);
       setBorrarTarget(null);
+      setBorrarMotivo("");
       setRefreshKey((k) => k + 1);
     } catch (e) {
       setBorrarError(e instanceof Error ? e.message : "No se pudo borrar el cliente.");
@@ -657,18 +665,64 @@ export default function ClientesPage() {
 
       <MobileFab href="/clientes/nuevo" label="Nuevo cliente" />
 
-      <ConfirmModal
-        open={borrarTarget != null}
-        title="Borrar cliente"
-        message={borrarTarget ? `¿Borrar a "${clienteNombre(borrarTarget)}"?\nCódigo: ${borrarTarget.codigo_cliente}` : ""}
-        hint={borrarError ?? "Requiere permisos de administrador. Se bloquea si el cliente tiene ventas, facturas o suscripciones activas."}
-        confirmLabel="Sí, borrar"
-        cancelLabel="Volver"
-        variant="danger"
-        loading={borrarLoading}
-        onConfirm={confirmarBorradoCliente}
-        onClose={() => { if (!borrarLoading) { setBorrarTarget(null); setBorrarError(null); } }}
-      />
+      {borrarTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => { if (!borrarLoading) { setBorrarTarget(null); setBorrarMotivo(""); setBorrarError(null); } }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="w-full max-w-md rounded-xl bg-white p-6 shadow-2xl space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div>
+              <h3 className="text-base font-semibold text-slate-900">Borrar cliente</h3>
+              <p className="mt-1 text-sm text-slate-700">
+                ¿Borrar a <strong>"{clienteNombre(borrarTarget)}"</strong>?
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">Código: {borrarTarget.codigo_cliente}</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-slate-600 mb-1">
+                Motivo de la eliminación *
+              </label>
+              <textarea
+                value={borrarMotivo}
+                onChange={(e) => setBorrarMotivo(e.target.value)}
+                placeholder="Ej. Duplicado, cliente inactivo, error de carga…"
+                rows={3}
+                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500/30"
+                autoFocus
+              />
+            </div>
+            {borrarError && (
+              <p className="text-xs text-red-600 bg-red-50 border border-red-200 rounded-md px-3 py-2">{borrarError}</p>
+            )}
+            <p className="text-xs text-slate-500">
+              Requiere permisos de admin. Se bloquea si el cliente tiene ventas, facturas o suscripciones activas.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => { if (!borrarLoading) { setBorrarTarget(null); setBorrarMotivo(""); setBorrarError(null); } }}
+                disabled={borrarLoading}
+                className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={confirmarBorradoCliente}
+                disabled={borrarLoading || borrarMotivo.trim().length < 3}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {borrarLoading ? "Borrando…" : "Sí, borrar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
