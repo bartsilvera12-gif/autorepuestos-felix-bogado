@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { getClientes, clienteNombre } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
@@ -289,6 +290,28 @@ export default function ClientesPage() {
   const [columnasInicializadas, setColumnasInicializadas] = useState(false);
   const [visibleColumnKeys, setVisibleColumnKeys] = useState<ClienteColumnKey[]>(DEFAULT_VISIBLE_COLUMN_KEYS);
   const [filasTipoCatalogo, setFilasTipoCatalogo] = useState<ClienteTipoServicioRow[]>(() => filasTiposDesdeSistemaEstatico());
+  const [refreshKey, setRefreshKey] = useState(0);
+
+  // Borrado (soft delete via DELETE /api/clientes/[id])
+  const [borrarTarget, setBorrarTarget] = useState<Cliente | null>(null);
+  const [borrarLoading, setBorrarLoading] = useState(false);
+  const [borrarError, setBorrarError] = useState<string | null>(null);
+
+  async function confirmarBorradoCliente() {
+    if (!borrarTarget) return;
+    setBorrarLoading(true); setBorrarError(null);
+    try {
+      const r = await fetch(`/api/clientes/${borrarTarget.id}`, { method: "DELETE", credentials: "include" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) throw new Error(j?.error ?? `Error ${r.status}`);
+      setBorrarTarget(null);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setBorrarError(e instanceof Error ? e.message : "No se pudo borrar el cliente.");
+    } finally {
+      setBorrarLoading(false);
+    }
+  }
   const mapNombreTipo = useMemo(() => {
     const m: Record<string, string> = {};
     for (const t of filasTipoCatalogo) m[t.slug] = t.nombre;
@@ -302,11 +325,12 @@ export default function ClientesPage() {
   );
 
   useEffect(() => {
+    setCargando(true);
     getClientes({ incluirPlanActivo: true }).then((data) => {
       setClientes(data);
       setCargando(false);
     });
-  }, []);
+  }, [refreshKey]);
 
   useEffect(() => {
     void fetchTiposFormCliente().then(setFilasTipoCatalogo);
@@ -598,6 +622,7 @@ export default function ClientesPage() {
                       {col.label}
                     </th>
                   ))}
+                  <th className="py-3 px-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">Acción</th>
                 </tr>
               </thead>
               <tbody>
@@ -612,6 +637,16 @@ export default function ClientesPage() {
                         {col.render(c)}
                       </td>
                     ))}
+                    <td className="py-3 px-4 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        onClick={() => { setBorrarTarget(c); setBorrarError(null); }}
+                        className="inline-flex items-center justify-center rounded-md border border-red-200 bg-white px-2.5 py-1 text-xs font-medium text-red-600 hover:border-red-300 hover:bg-red-50 transition-colors"
+                        title="Borrar cliente"
+                      >
+                        Borrar
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -621,6 +656,19 @@ export default function ClientesPage() {
       </div>
 
       <MobileFab href="/clientes/nuevo" label="Nuevo cliente" />
+
+      <ConfirmModal
+        open={borrarTarget != null}
+        title="Borrar cliente"
+        message={borrarTarget ? `¿Borrar a "${clienteNombre(borrarTarget)}"?\nCódigo: ${borrarTarget.codigo_cliente}` : ""}
+        hint={borrarError ?? "Requiere permisos de administrador. Se bloquea si el cliente tiene ventas, facturas o suscripciones activas."}
+        confirmLabel="Sí, borrar"
+        cancelLabel="Volver"
+        variant="danger"
+        loading={borrarLoading}
+        onConfirm={confirmarBorradoCliente}
+        onClose={() => { if (!borrarLoading) { setBorrarTarget(null); setBorrarError(null); } }}
+      />
     </div>
   );
 }
