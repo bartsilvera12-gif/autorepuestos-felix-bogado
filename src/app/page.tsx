@@ -1769,19 +1769,31 @@ const DashVentas = memo(function DashVentas({
     [productos]
   );
 
-  const gananciaHoy = useMemo(() =>
-    ventasHoy.flatMap(v => v.lineas ?? []).reduce((s, l) => {
+  // Ganancia y margen respetan el filtro de período (Hoy / 7d / 30d / Mes / Año).
+  // ventasFilt viene del selector de período de arriba del dashboard.
+  const gananciaPeriodo = useMemo(() =>
+    ventasFilt.flatMap(v => v.lineas ?? []).reduce((s, l) => {
       if (!l) return s;
       const costo = prodMap[l.producto_id]?.costo_promedio ?? 0;
       return s + (l.precio_venta - costo) * l.cantidad;
     }, 0),
-    [ventasHoy, prodMap]
+    [ventasFilt, prodMap]
   );
 
-  const totalHoyBruto = ventasHoy.flatMap(v => v.lineas ?? [])
+  const totalPeriodoBruto = ventasFilt.flatMap(v => v.lineas ?? [])
     .reduce((s, l) => s + (l ? l.precio_venta * l.cantidad : 0), 0);
 
-  const margenProm = totalHoyBruto > 0 ? (gananciaHoy / totalHoyBruto) * 100 : 0;
+  const margenProm = totalPeriodoBruto > 0 ? (gananciaPeriodo / totalPeriodoBruto) * 100 : 0;
+
+  // Label del período (para las cards de ganancia/margen).
+  const periodoLabel: Record<typeof periodo, string> = {
+    hoy: "del día",
+    "7d": "de 7 días",
+    "30d": "de 30 días",
+    mes: "del mes",
+    anio: "del año",
+  };
+  const periodoLabelCorto = periodoLabel[periodo] ?? "del periodo";
 
   const topProductos = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1832,20 +1844,20 @@ const DashVentas = memo(function DashVentas({
           sub={`en el periodo`} />
       </div>
 
-      {/* KPIs rentabilidad */}
+      {/* KPIs rentabilidad — respetan el filtro de período */}
       <div className="grid grid-cols-2 gap-4">
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-3xl font-bold tabular-nums text-[#4FAEB2]">
-            Gs. {formatGsFull(gananciaHoy)}
+            Gs. {formatGsFull(gananciaPeriodo)}
           </p>
-          <p className="text-xs font-semibold text-gray-700 mt-0.5">Ganancia del día</p>
+          <p className="text-xs font-semibold text-gray-700 mt-0.5">Ganancia {periodoLabelCorto}</p>
           <p className="text-xs text-gray-400">precio venta − costo promedio × cant.</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
           <p className="text-3xl font-bold tabular-nums text-[#4FAEB2]">
             {margenProm.toFixed(1)}%
           </p>
-          <p className="text-xs font-semibold text-gray-700 mt-0.5">Margen promedio (hoy)</p>
+          <p className="text-xs font-semibold text-gray-700 mt-0.5">Margen promedio {periodoLabelCorto}</p>
           <p className="text-xs text-gray-400">ganancia / precio venta</p>
         </div>
       </div>
