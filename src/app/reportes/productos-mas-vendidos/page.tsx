@@ -18,6 +18,21 @@ function formatNum(v: number) {
   return v.toLocaleString("es-PY", { maximumFractionDigits: 2 });
 }
 
+/** El SKU solo aporta si difiere del nombre (muchos productos lo repiten). */
+function skuUtil(sku: string | null, nombre: string): string | null {
+  if (!sku) return null;
+  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, " ");
+  return norm(sku) === norm(nombre) ? null : sku;
+}
+
+/** Estilo del badge de posición: medallas para el top 3, gris para el resto. */
+function rankBadgeCls(pos: number): string {
+  if (pos === 1) return "bg-amber-100 text-amber-700 ring-1 ring-amber-200";
+  if (pos === 2) return "bg-slate-200 text-slate-600 ring-1 ring-slate-300";
+  if (pos === 3) return "bg-orange-100 text-orange-700 ring-1 ring-orange-200";
+  return "bg-slate-50 text-slate-400";
+}
+
 /** YYYY-MM-DD del primer día del mes actual (hora local). */
 function primerDiaMesActual(): string {
   const d = new Date();
@@ -97,6 +112,14 @@ export default function ProductosMasVendidosPage() {
   const exportUrl = `/api/reportes/productos-mas-vendidos/export?${productosMasVendidosQueryString(filtros)}`;
   const rangoInvalido = Boolean(desde && hasta && desde > hasta);
 
+  // Máximo de la métrica activa (monto/unidades) para dimensionar la barra
+  // de proporción de cada fila del ranking.
+  const maxMetric = useMemo(() => {
+    if (!data || data.productos.length === 0) return 0;
+    const val = (p: (typeof data.productos)[number]) => (orden === "unidades" ? p.unidades : p.total);
+    return data.productos.reduce((m, p) => Math.max(m, val(p)), 0);
+  }, [data, orden]);
+
   return (
     <div className="space-y-8">
       <PageHeader
@@ -171,43 +194,96 @@ export default function ProductosMasVendidosPage() {
       </div>
 
       {/* Tabla ranking */}
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-        <h2 className="text-base font-semibold text-slate-800 mb-4">Ranking de productos</h2>
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+          <h2 className="text-base font-semibold text-slate-800">Ranking de productos</h2>
+          {data && data.productos.length > 0 && (
+            <span className="text-xs text-slate-400">
+              ordenado por {orden === "unidades" ? "unidades" : "monto"}
+            </span>
+          )}
+        </div>
+
         {cargando ? (
-          <p className="text-slate-500 animate-pulse">Cargando…</p>
+          <div className="p-6 space-y-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="h-8 rounded-md bg-slate-100 animate-pulse" />
+            ))}
+          </div>
         ) : !data ? (
-          <p className="text-sm text-slate-400">No se pudo cargar el reporte.</p>
+          <p className="p-6 text-sm text-slate-400">No se pudo cargar el reporte.</p>
         ) : data.productos.length === 0 ? (
-          <p className="text-sm text-slate-400">No hay ventas de productos para los filtros seleccionados.</p>
+          <div className="p-10 text-center">
+            <p className="text-sm font-medium text-slate-600">Sin resultados</p>
+            <p className="mt-1 text-sm text-slate-400">No hay ventas de productos para los filtros seleccionados.</p>
+          </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[820px] text-left text-sm">
+            <table className="w-full min-w-[860px] text-left text-sm">
               <thead>
-                <tr className="border-b text-slate-500">
-                  <th className="py-2.5 pr-3 font-medium w-10">#</th>
-                  <th className="py-2.5 pr-4 font-medium">Producto</th>
-                  <th className="py-2.5 pr-4 font-medium">Categoría</th>
-                  <th className="py-2.5 pr-4 font-medium">Proveedor</th>
-                  <th className="py-2.5 pr-4 font-medium text-right">Unidades</th>
-                  <th className="py-2.5 pr-4 font-medium text-right">Ventas</th>
-                  <th className="py-2.5 font-medium text-right">Monto total</th>
+                <tr className="border-b border-slate-100 bg-slate-50/60 text-[11px] uppercase tracking-wide text-slate-400">
+                  <th className="py-3 pl-6 pr-3 font-semibold w-14">#</th>
+                  <th className="py-3 pr-4 font-semibold">Producto</th>
+                  <th className="py-3 pr-4 font-semibold">Categoría</th>
+                  <th className="py-3 pr-4 font-semibold">Proveedor</th>
+                  <th className={`py-3 pr-4 font-semibold text-right ${orden === "unidades" ? "text-[#0EA5E9]" : ""}`}>Unidades</th>
+                  <th className="py-3 pr-4 font-semibold text-right">Ventas</th>
+                  <th className={`py-3 pr-6 font-semibold text-right ${orden === "monto" ? "text-[#0EA5E9]" : ""}`}>Monto total</th>
                 </tr>
               </thead>
               <tbody>
-                {data.productos.map((p, i) => (
-                  <tr key={p.producto_id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50">
-                    <td className="py-2.5 pr-3 tabular-nums text-slate-400">{i + 1}</td>
-                    <td className="py-2.5 pr-4 text-slate-800">
-                      {p.producto_nombre}
-                      {p.sku ? <span className="ml-2 font-mono text-xs text-slate-400">{p.sku}</span> : null}
-                    </td>
-                    <td className="py-2.5 pr-4 text-slate-600">{p.categoria_nombre ?? "—"}</td>
-                    <td className="py-2.5 pr-4 text-slate-600">{p.proveedor_nombre ?? "—"}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-slate-700">{formatNum(p.unidades)}</td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums text-slate-500">{p.ventas_count}</td>
-                    <td className="py-2.5 text-right tabular-nums font-semibold text-slate-800">{formatGs(p.total)}</td>
-                  </tr>
-                ))}
+                {data.productos.map((p, i) => {
+                  const pos = i + 1;
+                  const sku = skuUtil(p.sku, p.producto_nombre);
+                  const metric = orden === "unidades" ? p.unidades : p.total;
+                  const pct = maxMetric > 0 ? Math.max(2, Math.round((metric / maxMetric) * 100)) : 0;
+                  return (
+                    <tr key={p.producto_id} className="border-b border-slate-50 last:border-0 hover:bg-slate-50/70 transition-colors">
+                      <td className="py-3 pl-6 pr-3">
+                        <span className={`inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold tabular-nums ${rankBadgeCls(pos)}`}>
+                          {pos}
+                        </span>
+                      </td>
+                      <td className="py-3 pr-4">
+                        <span className="font-medium text-slate-800">{p.producto_nombre}</span>
+                        {sku && (
+                          <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-mono text-[11px] text-slate-500 align-middle">{sku}</span>
+                        )}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {p.categoria_nombre
+                          ? <span className="inline-block rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-600">{p.categoria_nombre}</span>
+                          : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {p.proveedor_nombre
+                          ? <span className="text-slate-600">{p.proveedor_nombre}</span>
+                          : <span className="text-slate-300">—</span>}
+                      </td>
+                      <td className="py-3 pr-4">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`tabular-nums ${orden === "unidades" ? "font-semibold text-slate-800" : "text-slate-600"}`}>{formatNum(p.unidades)}</span>
+                          {orden === "unidades" && (
+                            <div className="h-1 w-20 overflow-hidden rounded-full bg-slate-100">
+                              <div className="h-full rounded-full bg-[#0EA5E9]" style={{ width: `${pct}%` }} />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 pr-4 text-right tabular-nums text-slate-500">{p.ventas_count}</td>
+                      <td className="py-3 pr-6">
+                        <div className="flex flex-col items-end gap-1">
+                          <span className={`tabular-nums ${orden === "monto" ? "font-semibold text-slate-800" : "text-slate-700"}`}>{formatGs(p.total)}</span>
+                          {orden === "monto" && (
+                            <div className="h-1 w-24 overflow-hidden rounded-full bg-slate-100">
+                              <div className="h-full rounded-full bg-[#0EA5E9]" style={{ width: `${pct}%` }} />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
