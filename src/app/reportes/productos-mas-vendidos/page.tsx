@@ -58,7 +58,10 @@ export default function ProductosMasVendidosPage() {
   const [categoriaId, setCategoriaId] = useState("");
   const [proveedorId, setProveedorId] = useState("");
   const [orden, setOrden] = useState<"monto" | "unidades">("monto");
-  const [limite, setLimite] = useState<number>(0); // 0 = todos
+
+  // Paginación (client-side sobre el ranking completo). pageSize 0 = todos.
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [page, setPage] = useState(1);
 
   // Opciones de dropdowns
   const [categorias, setCategorias] = useState<Categoria[]>([]);
@@ -95,9 +98,8 @@ export default function ProductosMasVendidosPage() {
       categoriaId: categoriaId || null,
       proveedorId: proveedorId || null,
       orden,
-      limite: limite || null,
     }),
-    [desde, hasta, qDebounced, categoriaId, proveedorId, orden, limite]
+    [desde, hasta, qDebounced, categoriaId, proveedorId, orden]
   );
 
   useEffect(() => {
@@ -119,6 +121,17 @@ export default function ProductosMasVendidosPage() {
     const val = (p: (typeof data.productos)[number]) => (orden === "unidades" ? p.unidades : p.total);
     return data.productos.reduce((m, p) => Math.max(m, val(p)), 0);
   }, [data, orden]);
+
+  // Paginación derivada del ranking completo (client-side).
+  const total = data?.productos.length ?? 0;
+  const pageCount = pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+  // Al cambiar filtros o tamaño de página, volver a la primera.
+  useEffect(() => { setPage(1); }, [filtros, pageSize]);
+  // Clamp defensivo si el total encoge por debajo de la página actual.
+  const pageSafe = Math.min(page, pageCount);
+  const inicio = pageSize > 0 ? (pageSafe - 1) * pageSize : 0;
+  const fin = pageSize > 0 ? Math.min(inicio + pageSize, total) : total;
+  const visibles = data ? data.productos.slice(inicio, fin) : [];
 
   return (
     <div className="space-y-8">
@@ -168,16 +181,6 @@ export default function ProductosMasVendidosPage() {
             <select value={orden} onChange={(e) => setOrden(e.target.value as "monto" | "unidades")} className={inputCls}>
               <option value="monto">Monto vendido (Gs.)</option>
               <option value="unidades">Unidades vendidas</option>
-            </select>
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-xs text-slate-400">Mostrar</span>
-            <select value={limite} onChange={(e) => setLimite(Number(e.target.value))} className={inputCls}>
-              <option value={0}>Todos</option>
-              <option value={10}>Top 10</option>
-              <option value={20}>Top 20</option>
-              <option value={50}>Top 50</option>
-              <option value={100}>Top 100</option>
             </select>
           </label>
         </div>
@@ -232,8 +235,8 @@ export default function ProductosMasVendidosPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.productos.map((p, i) => {
-                  const pos = i + 1;
+                {visibles.map((p, i) => {
+                  const pos = inicio + i + 1;
                   const sku = skuUtil(p.sku, p.producto_nombre);
                   const metric = orden === "unidades" ? p.unidades : p.total;
                   const pct = maxMetric > 0 ? Math.max(2, Math.round((metric / maxMetric) * 100)) : 0;
@@ -286,6 +289,54 @@ export default function ProductosMasVendidosPage() {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {/* Footer de paginación */}
+        {data && data.productos.length > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-6 py-3">
+            <div className="flex items-center gap-2 text-xs text-slate-500">
+              <span>Filas por página</span>
+              <select
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
+                className="rounded-lg border border-slate-200 px-2 py-1 text-xs bg-white outline-none focus:ring-2 focus:ring-[#0EA5E9]"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+                <option value={0}>Todos</option>
+              </select>
+            </div>
+
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-slate-500 tabular-nums">
+                {total === 0 ? "0" : `${inicio + 1}–${fin}`} de {total}
+              </span>
+              {pageSize > 0 && pageCount > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setPage((n) => Math.max(1, n - 1))}
+                    disabled={pageSafe <= 1}
+                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+                  >
+                    ← Anterior
+                  </button>
+                  <span className="px-2 text-xs text-slate-500 tabular-nums">
+                    Página {pageSafe} de {pageCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setPage((n) => Math.min(pageCount, n + 1))}
+                    disabled={pageSafe >= pageCount}
+                    className="rounded-lg border border-slate-200 px-2.5 py-1 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:hover:bg-white transition-colors"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
