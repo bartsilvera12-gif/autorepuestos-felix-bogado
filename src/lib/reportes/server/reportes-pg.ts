@@ -31,6 +31,9 @@ import type {
   ConciliacionReporte,
   ConciliacionAgrupado,
   ConciliacionMovRow,
+  ProductosMasVendidosReporte,
+  ProductoMasVendidoRow,
+  OrdenProductosMasVendidos,
 } from "@/lib/reportes/types";
 
 function pool() {
@@ -471,5 +474,136 @@ export async function getReporteConciliacion(
     porMetodo: porMetodo.rows.map((r) => ({ clave: r.clave, cantidad: num(r.cantidad), total: num(r.total) })),
     porEntidad: porEntidad.rows.map((r) => ({ clave: r.clave, cantidad: num(r.cantidad), total: num(r.total) })),
     movimientos,
+  };
+}
+
+// ── Productos más vendidos (ranking filtrable) ────────────────────────────────
+
+export interface ProductosMasVendidosParams {
+  /** Límites timestamptz del rango (Asunción) ya resueltos. */
+  start: string;
+  end: string;
+  /** Eco de las fechas ingresadas (YYYY-MM-DD) para la salida. */
+  desde: string | null;
+  hasta: string | null;
+  q: string | null;              // búsqueda por nombre de producto
+  categoriaId: string | null;    // productos.categoria_principal_id
+  proveedorId: string | null;    // productos.proveedor_principal_id
+  orden: OrdenProductosMasVendidos;
+  limite: number | null;         // top N (null = todos)
+}
+
+/**
+ * Ranking de productos más vendidos en un rango de fechas, con filtros por
+ * texto, categoría y proveedor. Ordena por monto o por unidades.
+ *
+ * JOIN a `productos` (INNER; FK ON DELETE RESTRICT garantiza existencia) para
+ * resolver categoría/proveedor principal de cada producto. La categoría y el
+ * proveedor se resuelven por las FKs directas `categoria_principal_id` /
+ * `proveedor_principal_id`.
+ */
+export async function getReporteProductosMasVendidos(
+  schemaRaw: string,
+  empresaId: string,
+  params: ProductosMasVendidosParams
+): Promise<ProductosMasVendidosReporte> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tVI = quoteSchemaTable(schema, "ventas_items");
+  const tV = quoteSchemaTable(schema, "ventas");
+  const tProd = quoteSchemaTable(schema, "productos");
+  const tCat = quoteSchemaTable(schema, "categorias_productos");
+  const tProv = quoteSchemaTable(schema, "proveedores");
+  const p = pool();
+
+  // WHERE dinámico con args posicionales.
+  const args: string[] = [empresaId, params.start, params.end];
+  const where: string[] = [
+    `v.empresa_id=$1::uuid`,
+    `v.fecha>=$2::timestamptz`,
+    `v.fecha<=$3::timestamptz`,
+  ];
+  if (params.q && params.q.trim()) {
+    args.push(`%${params.q.trim()}%`);
+    where.push(`vi.producto_nombre ILIKE $${args.length}`);
+  }
+  if (params.categoriaId) {
+    args.push(params.categoriaId);
+    where.push(`p.categoria_principal_id=$${args.length}::uuid`);
+  }
+  if (params.proveedorId) {
+    args.push(params.proveedorId);
+    where.push(`p.proveedor_principal_id=$${args.length}::uuid`);
+  }
+
+  const orderCol = params.orden === "unidades" ? "unidades" : "total";
+  const limitSql =
+    params.limite && params.limite > 0 ? `LIMIT ${Math.floor(params.limite)}` : "";
+
+  const q = await p.query<ProductoMasVendidoRow>(
+    `SELECT vi.producto_id::text AS producto_id,
+            MAX(vi.producto_nombre) AS producto_nombre,
+            MAX(vi.sku) AS sku,
+            MAX(c.nombre) AS categoria_nombre,
+            MAX(pr.nombre) AS proveedor_nombre,
+            SUM(vi.cantidad)::float8 AS unidades,
+            SUM(vi.total_linea)::float8 AS total,
+            COUNT(DISTINCT v.id)::int AS ventas_count
+       FROM ${tVI} vi
+       JOIN ${tV} v ON v.id=vi.venta_id
+       JOIN ${tProd} p ON p.id=vi.producto_id AND p.empresa_id=vi.empresa_id
+       LEFT JOIN ${tCat} c ON c.id=p.categoria_principal_id
+       LEFT JOIN ${tProv} pr ON pr.id=p.proveedor_principal_id
+      WHERE ${where.join(" AND ")}
+      GROUP BY vi.producto_id
+      ORDER BY ${orderCol} DESC, producto_nombre ASC
+      ${limitSql}`,
+    args
+  );
+
+  // Nombres para eco de filtros (si vienen ids).
+  let categoriaNombre: string | null = null;
+  let proveedorNombre: string | null = null;
+  if (params.categoriaId) {
+    const r = await p.query<{ nombre: string }>(
+      `SELECT nombre FROM ${tCat} WHERE id=$1::uuid AND empresa_id=$2::uuid LIMIT 1`,
+      [params.categoriaId, empresaId]
+    );
+    categoriaNombre = r.rows[0]?.nombre ?? null;
+  }
+  if (params.proveedorId) {
+    const r = await p.query<{ nombre: string }>(
+      `SELECT nombre FROM ${tProv} WHERE id=$1::uuid AND empresa_id=$2::uuid LIMIT 1`,
+      [params.proveedorId, empresaId]
+    );
+    proveedorNombre = r.rows[0]?.nombre ?? null;
+  }
+
+  const productos: ProductoMasVendidoRow[] = q.rows.map((r) => ({
+    producto_id: r.producto_id,
+    producto_nombre: r.producto_nombre,
+    sku: r.sku || null,
+    categoria_nombre: r.categoria_nombre || null,
+    proveedor_nombre: r.proveedor_nombre || null,
+    unidades: num(r.unidades),
+    total: num(r.total),
+    ventas_count: num(r.ventas_count),
+  }));
+
+  return {
+    filtros: {
+      desde: params.desde,
+      hasta: params.hasta,
+      q: params.q && params.q.trim() ? params.q.trim() : null,
+      categoriaId: params.categoriaId,
+      categoriaNombre,
+      proveedorId: params.proveedorId,
+      proveedorNombre,
+      orden: params.orden,
+      limite: params.limite,
+    },
+    totalUnidades: productos.reduce((s, r) => s + r.unidades, 0),
+    totalMonto: productos.reduce((s, r) => s + r.total, 0),
+    cantidadProductos: productos.length,
+    productos,
   };
 }

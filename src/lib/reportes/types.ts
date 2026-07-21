@@ -187,3 +187,40 @@ export interface ConciliacionReporte {
   porEntidad: ConciliacionAgrupado[];
   movimientos: ConciliacionMovRow[];
 }
+
+// ── Productos más vendidos (ranking filtrable) ────────────────────────────────
+
+export type OrdenProductosMasVendidos = "monto" | "unidades";
+
+/** Filtros aplicados al ranking (eco desde el server para el Excel/UI). */
+export interface ProductosMasVendidosFiltros {
+  desde: string | null;         // YYYY-MM-DD (Asunción) o null
+  hasta: string | null;         // YYYY-MM-DD (Asunción) o null
+  q: string | null;             // búsqueda por nombre de producto
+  categoriaId: string | null;
+  categoriaNombre: string | null;
+  proveedorId: string | null;
+  proveedorNombre: string | null;
+  orden: OrdenProductosMasVendidos;
+  limite: number | null;        // top N, null = todos
+}
+
+/** Una fila del ranking de productos más vendidos. */
+export interface ProductoMasVendidoRow {
+  producto_id: string;
+  producto_nombre: string;
+  sku: string | null;
+  categoria_nombre: string | null;
+  proveedor_nombre: string | null;
+  unidades: number;             // SUM(cantidad)
+  total: number;                // SUM(total_linea)
+  ventas_count: number;         // ventas distintas que incluyeron el producto
+}
+
+export interface ProductosMasVendidosReporte {
+  filtros: ProductosMasVendidosFiltros;
+  totalUnidades: number;        // suma de unidades del ranking mostrado
+  totalMonto: number;           // suma de montos del ranking mostrado
+  cantidadProductos: number;    // filas del ranking
+  productos: ProductoMasVendidoRow[];
+}

@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Archive, HandCoins, BookOpen, ClipboardCheck } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Archive, HandCoins, BookOpen, ClipboardCheck, Trophy } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -31,6 +31,15 @@ export default function ReportesPage() {
             icon={ShoppingCart}
             description="Ventas del mes, desglose por tipo de precio (minorista/mayorista/al costo) y por producto."
             href="/reportes/ventas"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Productos más vendidos"
+            subtitle="Ranking · filtrable y exportable"
+            icon={Trophy}
+            description="Ranking de productos por unidades o monto, con filtros por rango de fechas, búsqueda, categoría y proveedor. Descargable en Excel."
+            href="/reportes/productos-mas-vendidos"
           />
         </li>
         <li>
