@@ -132,10 +132,20 @@ export default function InventarioPage() {
   // Con catalogos de 500-5000 productos esto era visible (lag al tipear).
   // useMemo solo recalcula cuando cambian las dependencias relevantes.
   const productos = useMemo(() => todos.filter((p) => {
-    // Nombre — fold accents/diacritics ("atun" matchea "ATÚN")
-    if (filtroPorNombre.trim() !== "" &&
-        !foldText(p.nombre).includes(foldText(filtroPorNombre.trim())))
-      return false;
+    // Búsqueda principal — busca en nombre + SKU + código de barras + OEM +
+    // código alternativo. Un solo input hace todo (un lector de código de
+    // barras que apunta acá encuentra el producto directo).
+    if (filtroPorNombre.trim() !== "") {
+      const q = foldText(filtroPorNombre.trim());
+      const campos = [
+        p.nombre,
+        p.sku,
+        p.codigo_barras ?? "",
+        p.codigo_oem ?? "",
+        p.codigo_alternativo ?? "",
+      ].map(foldText);
+      if (!campos.some((c) => c.includes(q))) return false;
+    }
 
     // SKU
     if (filtroPorSku.trim() !== "" &&
@@ -351,10 +361,10 @@ export default function InventarioPage() {
             </Link>
             <input
               type="text"
-              placeholder="Buscar por nombre..."
+              placeholder="Buscar por nombre, SKU, código de barras…"
               value={filtroPorNombre}
               onChange={(e) => setFiltroPorNombre(e.target.value)}
-              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none sm:w-64 sm:flex-none"
+              className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none sm:w-80 sm:flex-none"
             />
             {/* Filtros auto-parts: estado de stock + distribuidor */}
             <select
