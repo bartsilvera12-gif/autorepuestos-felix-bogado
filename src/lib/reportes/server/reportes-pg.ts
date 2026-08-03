@@ -66,7 +66,8 @@ export async function getEstadoCuenta(
 
   const ventasQ = p.query<{ total: number }>(
     `SELECT COALESCE(SUM(total),0)::float8 AS total FROM ${tVentas}
-      WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
+      WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+        AND COALESCE(estado,'') <> 'anulada'`,
     [empresaId, b.start, b.end]
   );
   const comprasQ = p.query<{ total: number }>(
@@ -81,7 +82,8 @@ export async function getEstadoCuenta(
   );
   const porCobrarQ = p.query<{ total: number }>(
     `SELECT COALESCE(SUM(total),0)::float8 AS total FROM ${tVentas}
-      WHERE empresa_id=$1::uuid AND tipo_venta='CREDITO' AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
+      WHERE empresa_id=$1::uuid AND tipo_venta='CREDITO' AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+        AND COALESCE(estado,'') <> 'anulada'`,
     [empresaId, b.start, b.end]
   );
   const porPagarQ = p.query<{ total: number }>(
@@ -96,6 +98,7 @@ export async function getEstadoCuenta(
                'Venta a cliente'::text AS descripcion, total::float8 AS entrada, 0::float8 AS salida
           FROM ${tVentas}
          WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+           AND COALESCE(estado,'') <> 'anulada'
         UNION ALL
         SELECT MIN(fecha) AS fecha, 'Compra'::text, numero_control,
                MIN(proveedor_nombre), 0::float8, SUM(total)::float8
@@ -306,7 +309,9 @@ export async function getReporteVentas(
   const tVI = quoteSchemaTable(schema, "ventas_items");
   const tCli = quoteSchemaTable(schema, "clientes");
   const p = pool();
-  const perV = `v.empresa_id=$1::uuid AND v.fecha>=$2::timestamptz AND v.fecha<=$3::timestamptz`;
+  // Excluir ventas anuladas — de lo contrario el reporte queda inflado y no cuadra
+  // con el dashboard (que sí filtra estado='anulada' en tenant-tables).
+  const perV = `v.empresa_id=$1::uuid AND v.fecha>=$2::timestamptz AND v.fecha<=$3::timestamptz AND COALESCE(v.estado,'') <> 'anulada'`;
   const args = [empresaId, b.start, b.end];
 
   // Totales de cabecera.
@@ -421,6 +426,7 @@ export async function getReporteConciliacion(
         LEFT JOIN ${tEnt} eb ON eb.id=d.entidad_bancaria_id AND eb.empresa_id=d.empresa_id
        WHERE d.empresa_id=$1::uuid AND v.fecha>=$2::timestamptz AND v.fecha<=$3::timestamptz
          AND d.metodo_pago IS NOT NULL AND d.metodo_pago <> 'efectivo'
+         AND COALESCE(v.estado,'') <> 'anulada'
       UNION ALL
       SELECT cc.id::text AS id, 'cobro'::text AS tipo, cc.fecha_pago AS fecha,
              COALESCE(vc.numero_control, cta.numero_venta) AS numero, c.nombre AS cliente, cc.metodo_pago AS metodo,
@@ -521,6 +527,7 @@ export async function getReporteProductosMasVendidos(
     `v.empresa_id=$1::uuid`,
     `v.fecha>=$2::timestamptz`,
     `v.fecha<=$3::timestamptz`,
+    `COALESCE(v.estado,'') <> 'anulada'`,
   ];
   if (params.q && params.q.trim()) {
     args.push(`%${params.q.trim()}%`);
