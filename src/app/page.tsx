@@ -98,7 +98,8 @@ function labelClienteDimension(raw: string): string {
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type Periodo = "hoy" | "7d" | "30d" | "mes" | "anio";
+type Periodo = "hoy" | "7d" | "30d" | "mes" | "anio" | "custom";
+type RangoCustom = { desde: string; hasta: string };
 type TabDash = DashboardTabSlug;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -150,7 +151,16 @@ function formatFecha(s: string): string {
   return dt.toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function getRango(periodo: Periodo): { desde: Date; hasta: Date } {
+function parseFechaLocal(s: string, endOfDay: boolean): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]) - 1, d = Number(m[3]);
+  return endOfDay
+    ? new Date(y, mo, d, 23, 59, 59, 999)
+    : new Date(y, mo, d, 0, 0, 0, 0);
+}
+
+function getRango(periodo: Periodo, custom?: RangoCustom): { desde: Date; hasta: Date } {
   const ahora = new Date();
   switch (periodo) {
     case "mes":
@@ -182,6 +192,12 @@ function getRango(periodo: Periodo): { desde: Date; hasta: Date } {
       const desde = new Date(ahora.getFullYear(), 0, 1, 0, 0, 0, 0);
       const hasta = new Date(ahora.getFullYear(), 11, 31, 23, 59, 59, 999);
       return { desde, hasta };
+    }
+    case "custom": {
+      const d = custom ? parseFechaLocal(custom.desde, false) : null;
+      const h = custom ? parseFechaLocal(custom.hasta, true) : null;
+      if (d && h && d.getTime() <= h.getTime()) return { desde: d, hasta: h };
+      return rangoMesCalendarioLocal(ahora);
     }
     default:
       return rangoMesCalendarioLocal(ahora);
@@ -623,6 +639,7 @@ const DashComercial = memo(function DashComercial({
   tipificaciones: _tipificaciones,
   usuario,
   periodo,
+  rangoCustom,
   config,
   facturas,
   notasCredito,
@@ -634,13 +651,14 @@ const DashComercial = memo(function DashComercial({
   tipificaciones: TipificacionRaw[];
   usuario: Usuario | null;
   periodo: Periodo;
+  rangoCustom: RangoCustom;
   config: ConfigGlobal;
   facturas: FacturaRaw[];
   notasCredito: NotaCreditoDashRow[];
   suscripciones: SuscripcionDashRow[];
 }) {
   void _tipificaciones;
-  const { desde, hasta } = useMemo(() => getRango(periodo), [periodo]);
+  const { desde, hasta } = useMemo(() => getRango(periodo, rangoCustom), [periodo, rangoCustom]);
 
   const [etapasCrmCatalog, setEtapasCrmCatalog] = useState<EtapaCrm[]>([]);
   useEffect(() => {
@@ -1055,17 +1073,18 @@ function composicionFacturacionPorModalidad(facturasPeriodo: FacturaRaw[]) {
 // memo: el sub-dashboard financiero hace muchos useMemo internos sobre facturas
 // y pagos. Sin memo, cualquier render del padre (ej: cambio de tab) los invalidaba.
 const DashFinanciero = memo(function DashFinanciero({
-  facturas, pagos, clientes, ventas, periodo, config, mapNombreTipoServicio,
+  facturas, pagos, clientes, ventas, periodo, rangoCustom, config, mapNombreTipoServicio,
 }: {
   facturas:  FacturaRaw[];
   pagos:     PagoRaw[];
   clientes:  ClienteRaw[];
   ventas:    VentaRaw[];
   periodo:   Periodo;
+  rangoCustom: RangoCustom;
   config:    ConfigGlobal;
   mapNombreTipoServicio: Readonly<Record<string, string>>;
 }) {
-  const { desde, hasta } = useMemo(() => getRango(periodo), [periodo]);
+  const { desde, hasta } = useMemo(() => getRango(periodo, rangoCustom), [periodo, rangoCustom]);
 
   // Bloque principal: métricas del período (misma ventana que el filtro superior: enRango + fechas calendario)
   const facturasValidas = facturas.filter((f) => !esFacturaAnulada(f.estado));
@@ -1737,12 +1756,14 @@ const DashVentas = memo(function DashVentas({
   ventas,
   productos,
   periodo,
+  rangoCustom,
 }: {
   ventas:    VentaRaw[];
   productos: ProductoRaw[];
   periodo:   Periodo;
+  rangoCustom: RangoCustom;
 }) {
-  const { desde, hasta } = useMemo(() => getRango(periodo), [periodo]);
+  const { desde, hasta } = useMemo(() => getRango(periodo, rangoCustom), [periodo, rangoCustom]);
 
   const ventasFilt = useMemo(() =>
     ventas.filter(v => enRango(v.fecha, desde, hasta)),
@@ -1792,6 +1813,7 @@ const DashVentas = memo(function DashVentas({
     "30d": "de 30 días",
     mes: "del mes",
     anio: "del año",
+    custom: "del periodo",
   };
   const periodoLabelCorto = periodoLabel[periodo] ?? "del periodo";
 
@@ -1926,12 +1948,27 @@ const DashVentas = memo(function DashVentas({
 // ── Página principal ──────────────────────────────────────────────────────────
 
 const PERIODO_OPTS: { id: Periodo; label: string }[] = [
-  { id: "hoy",  label: "Hoy"       },
-  { id: "7d",   label: "7 días"    },
-  { id: "30d",  label: "30 días"   },
-  { id: "mes",  label: "Mes actual"},
-  { id: "anio", label: "Año"       },
+  { id: "hoy",    label: "Hoy"          },
+  { id: "7d",     label: "7 días"       },
+  { id: "30d",    label: "30 días"      },
+  { id: "mes",    label: "Mes actual"   },
+  { id: "anio",   label: "Año"          },
+  { id: "custom", label: "Personalizado"},
 ];
+
+function hoyISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+function inicioMesISO(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`;
+}
 
 const TAB_VALID: TabDash[] = ["comercial", "financiero", "inventario", "ventas"];
 
@@ -1952,6 +1989,7 @@ export default function DashboardPage() {
   const [dashScope, setDashScope] = useState<DashScope>({ kind: "pending" });
   const [tab,      setTab]      = useState<TabDash>(getInitialTab);
   const [periodo,  setPeriodo]  = useState<Periodo>("mes");
+  const [rangoCustom, setRangoCustom] = useState<RangoCustom>(() => ({ desde: inicioMesISO(), hasta: hoyISO() }));
   const [config,   setConfig]   = useState<ConfigGlobal | null>(null);
   const [usuarios, setUsuarios] = useState<Usuario[]>([]);
   const [usuarioId, setUsuarioId] = useState<number | null>(null);
@@ -2244,6 +2282,33 @@ export default function DashboardPage() {
               </button>
             ))}
           </div>
+          {periodo === "custom" && (
+            <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-200 p-2" style={{ backgroundColor: Z.surface }}>
+              <label className="flex items-center gap-1.5 text-xs" style={{ color: Z.muted }}>
+                Desde
+                <input
+                  type="date"
+                  value={rangoCustom.desde}
+                  max={rangoCustom.hasta}
+                  onChange={(e) => setRangoCustom((r) => ({ ...r, desde: e.target.value }))}
+                  className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                  style={{ backgroundColor: Z.surface, color: Z.text }}
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs" style={{ color: Z.muted }}>
+                Hasta
+                <input
+                  type="date"
+                  value={rangoCustom.hasta}
+                  min={rangoCustom.desde}
+                  max={hoyISO()}
+                  onChange={(e) => setRangoCustom((r) => ({ ...r, hasta: e.target.value }))}
+                  className="rounded-md border border-slate-200 px-2 py-1 text-xs"
+                  style={{ backgroundColor: Z.surface, color: Z.text }}
+                />
+              </label>
+            </div>
+          )}
         </div>
       </header>
 
@@ -2287,6 +2352,7 @@ export default function DashboardPage() {
           tipificaciones={tipificaciones}
           usuario={usuarioActivo}
           periodo={periodo}
+          rangoCustom={rangoCustom}
           config={config}
           facturas={facturas}
           notasCredito={notasCredito}
@@ -2304,6 +2370,7 @@ export default function DashboardPage() {
             clientes={clientes}
             ventas={ventas}
             periodo={periodo}
+            rangoCustom={rangoCustom}
             config={config}
             mapNombreTipoServicio={mapNombreTipoServicio}
           />
@@ -2322,6 +2389,7 @@ export default function DashboardPage() {
           ventas={ventas}
           productos={productos}
           periodo={periodo}
+          rangoCustom={rangoCustom}
         />
       )}
 
