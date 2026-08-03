@@ -72,7 +72,8 @@ export async function getEstadoCuenta(
   );
   const comprasQ = p.query<{ total: number }>(
     `SELECT COALESCE(SUM(total),0)::float8 AS total FROM ${tCompras}
-      WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
+      WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+        AND COALESCE(estado,'') <> 'anulada'`,
     [empresaId, b.start, b.end]
   );
   const gastosQ = p.query<{ total: number }>(
@@ -88,7 +89,8 @@ export async function getEstadoCuenta(
   );
   const porPagarQ = p.query<{ total: number }>(
     `SELECT COALESCE(SUM(total),0)::float8 AS total FROM ${tCompras}
-      WHERE empresa_id=$1::uuid AND tipo_pago='credito' AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
+      WHERE empresa_id=$1::uuid AND tipo_pago='credito' AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+        AND COALESCE(estado,'') <> 'anulada'`,
     [empresaId, b.start, b.end]
   );
   // Compras agrupadas por numero_control (modelo plano): una fila por compra real.
@@ -104,6 +106,7 @@ export async function getEstadoCuenta(
                MIN(proveedor_nombre), 0::float8, SUM(total)::float8
           FROM ${tCompras}
          WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+           AND COALESCE(estado,'') <> 'anulada'
          GROUP BY numero_control
         UNION ALL
         SELECT fecha::timestamptz, 'Gasto'::text, COALESCE(categoria,''),
@@ -157,13 +160,15 @@ export async function getReporteProveedores(
     `SELECT count(*)::int AS n FROM ${tProv} WHERE empresa_id=$1::uuid`, [empresaId]);
   const mesQ = p.query<{ proveedores: number; total: number }>(
     `SELECT count(DISTINCT proveedor_id)::int AS proveedores, COALESCE(SUM(total),0)::float8 AS total
-       FROM ${tC} WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
+       FROM ${tC} WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+         AND COALESCE(estado,'') <> 'anulada'`,
     [empresaId, b.start, b.end]);
   // Última compra: total de la compra agrupada por numero_control (modelo plano).
   const ultimaQ = p.query<{ numero_control: string; proveedor_nombre: string; total: number; fecha: string }>(
     `SELECT numero_control, MIN(proveedor_nombre) AS proveedor_nombre,
             SUM(total)::float8 AS total, MAX(fecha) AS fecha
        FROM ${tC} WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+         AND COALESCE(estado,'') <> 'anulada'
       GROUP BY numero_control
       ORDER BY MAX(fecha) DESC LIMIT 1`, [empresaId, b.start, b.end]);
   // Proveedores con sus métricas del mes (LEFT JOIN para incluir los sin compras).
@@ -180,6 +185,7 @@ export async function getReporteProveedores(
                 SUM(total)::float8 AS total,
                 MAX(fecha) AS ultima_compra
            FROM ${tC} WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+             AND COALESCE(estado,'') <> 'anulada'
           GROUP BY proveedor_id
        ) cc ON cc.proveedor_id = pr.id
       WHERE pr.empresa_id=$1::uuid
@@ -212,7 +218,8 @@ export async function getReporteCompras(
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tC = quoteSchemaTable(schema, "compras");
   const p = pool();
-  const per = `c.empresa_id=$1::uuid AND c.fecha>=$2::timestamptz AND c.fecha<=$3::timestamptz`;
+  // Excluir compras anuladas — mismo criterio que ventas (ver getReporteVentas).
+  const per = `c.empresa_id=$1::uuid AND c.fecha>=$2::timestamptz AND c.fecha<=$3::timestamptz AND COALESCE(c.estado,'') <> 'anulada'`;
   const args = [empresaId, b.start, b.end];
 
   // Totales: compras distintas (numero_control), líneas (count *) y total (suma de líneas).
@@ -441,6 +448,8 @@ export async function getReporteConciliacion(
         LEFT JOIN ${tEnt} eb ON eb.id=cc.entidad_bancaria_id AND eb.empresa_id=cc.empresa_id
        WHERE cc.empresa_id=$1::uuid AND cc.fecha_pago>=$2::timestamptz AND cc.fecha_pago<=$3::timestamptz
          AND cc.metodo_pago IS NOT NULL AND cc.metodo_pago <> 'efectivo'
+         AND COALESCE(vc.estado,'') <> 'anulada'
+         AND COALESCE(cta.estado,'') <> 'anulada'
     )`;
 
   const movsQ = p.query<ConciliacionMovRow>(

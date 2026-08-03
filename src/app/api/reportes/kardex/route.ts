@@ -52,8 +52,10 @@ export async function GET(request: NextRequest) {
       .eq("producto_id", productoId)
       .order("fecha", { ascending: true })
       .limit(10000);
-    if (desde) mQ = mQ.gte("fecha", `${desde}T00:00:00.000Z`);
-    if (hasta) mQ = mQ.lte("fecha", `${hasta}T23:59:59.999Z`);
+    // Bordes en hora Asunción (UTC-4). Si se usaba Z, se perdían ~4h del último
+    // día y se pisaban con el día anterior (movimientos post-20:00 quedaban fuera).
+    if (desde) mQ = mQ.gte("fecha", new Date(`${desde}T00:00:00.000-04:00`).toISOString());
+    if (hasta) mQ = mQ.lte("fecha", new Date(`${hasta}T23:59:59.999-04:00`).toISOString());
     const mR = await mQ;
     if (mR.error) throw new Error(mR.error.message);
 
