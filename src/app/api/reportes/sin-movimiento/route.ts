@@ -54,11 +54,14 @@ export async function GET(request: NextRequest) {
     const ids = productos.map((p) => p.id);
 
     // 2) Productos con salida en los últimos N días → exclusión.
+    //    Se excluyen SALIDAs anuladas: un producto cuya única salida fue
+    //    una venta después anulada debe seguir apareciendo como stock muerto.
     const movQ = await supabase
       .from("movimientos_inventario")
       .select("producto_id")
       .eq("empresa_id", empresaId)
       .eq("tipo", "SALIDA")
+      .eq("estado", "activa")
       .gte("fecha", corte)
       .in("producto_id", ids);
     if (movQ.error) throw new Error(movQ.error.message);
@@ -73,6 +76,7 @@ export async function GET(request: NextRequest) {
         .select("producto_id, fecha")
         .eq("empresa_id", empresaId)
         .eq("tipo", "SALIDA")
+        .eq("estado", "activa")
         .in("producto_id", sinMovIds)
         .order("fecha", { ascending: false });
       if (ultQ.error) throw new Error(ultQ.error.message);

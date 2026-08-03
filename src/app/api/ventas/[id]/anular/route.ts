@@ -89,7 +89,25 @@ export async function POST(
       .eq("estado", "completada");
     if (updV.error) throw new Error(updV.error.message);
 
-    // 4) Reversar stock + movimiento ENTRADA por item (best-effort).
+    // 4) Marcar como 'anulada' las SALIDAs originales de esta venta en
+    //    movimientos_inventario. Los reportes de rotación y sin-movimiento
+    //    miran movimientos crudos; sin esto una venta anulada seguiría
+    //    contando como rotación real. La ENTRADA compensatoria se agrega
+    //    igual abajo, así el kardex muestra ambas para trazabilidad.
+    try {
+      const upSalidas = await sb
+        .from("movimientos_inventario")
+        .update({ estado: "anulada" })
+        .eq("empresa_id", empresaId)
+        .eq("venta_id", id)
+        .eq("tipo", "SALIDA")
+        .eq("estado", "activa");
+      if (upSalidas.error) console.warn("[anular venta] no se pudieron marcar SALIDAs:", upSalidas.error.message);
+    } catch (e) {
+      console.warn("[anular venta] error marcando SALIDAs:", e instanceof Error ? e.message : e);
+    }
+
+    // 5) Reversar stock + movimiento ENTRADA por item (best-effort).
     const warnings: string[] = [];
     for (const it of items) {
       const qty = Number(it.cantidad) || 0;

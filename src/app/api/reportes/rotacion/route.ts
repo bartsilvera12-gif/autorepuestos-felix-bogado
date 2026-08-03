@@ -56,12 +56,15 @@ export async function GET(request: NextRequest) {
     const ids = productos.map((p) => p.id);
 
     // 2) Salidas por venta agregadas en JS (PostgREST no agrupa fácil aquí).
+    //    Se excluyen movimientos anulados (SALIDAs de ventas que después
+    //    fueron anuladas) — de lo contrario el ratio queda inflado.
     const movQ = await supabase
       .from("movimientos_inventario")
       .select("producto_id, cantidad")
       .eq("empresa_id", empresaId)
       .eq("tipo", "SALIDA")
       .eq("origen", "venta")
+      .eq("estado", "activa")
       .gte("fecha", corte)
       .in("producto_id", ids);
     if (movQ.error) throw new Error(movQ.error.message);
