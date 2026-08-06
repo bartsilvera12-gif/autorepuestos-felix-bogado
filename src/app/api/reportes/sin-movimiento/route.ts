@@ -54,50 +54,87 @@ export async function GET(request: NextRequest) {
     const ids = productos.map((p) => p.id);
 
     // 2) Productos con salida en los últimos N días → exclusión.
-    //    Se excluyen SALIDAs anuladas: un producto cuya única salida fue
-    //    una venta después anulada debe seguir apareciendo como stock muerto.
-    //    Fallback si PostgREST aún no ve la columna `estado`.
-    const buildMovQ = (withEstado: boolean) => {
+    //    NOTA: no se puede pasar todos los `ids` como .in() porque con miles de
+    //    productos la URL supera el límite de Cloudflare/Traefik y da 520.
+    //    Traemos TODAS las SALIDAs en el rango (empresa) y filtramos en JS.
+    //    Se excluyen SALIDAs anuladas (columna nueva `estado`, con fallback
+    //    por si PostgREST aún no la ve).
+    const idSet = new Set(ids);
+    const CHUNK = 1000;
+    const fetchMovsPage = async (withEstado: boolean, offset: number) => {
       let q = supabase
         .from("movimientos_inventario")
         .select("producto_id")
         .eq("empresa_id", empresaId)
         .eq("tipo", "SALIDA")
         .gte("fecha", corte)
-        .in("producto_id", ids);
+        .range(offset, offset + CHUNK - 1);
       if (withEstado) q = q.eq("estado", "activa");
       return q;
     };
-    let movQ = await buildMovQ(true);
-    if (movQ.error) {
-      console.warn("[/api/reportes/sin-movimiento] fallback sin filtro estado:", movQ.error.message);
-      movQ = await buildMovQ(false);
-      if (movQ.error) throw new Error(movQ.error.message);
+    let useEstado = true;
+    let firstPage = await fetchMovsPage(true, 0);
+    if (firstPage.error) {
+      console.warn("[/api/reportes/sin-movimiento] fallback sin filtro estado:", firstPage.error.message);
+      useEstado = false;
+      firstPage = await fetchMovsPage(false, 0);
+      if (firstPage.error) throw new Error(firstPage.error.message);
     }
-    const conMov = new Set((movQ.data ?? []).map((r) => String((r as { producto_id: string }).producto_id)));
+    const conMov = new Set<string>();
+    const pushRows = (rows: Array<{ producto_id: string }>) => {
+      for (const r of rows) {
+        const pid = String(r.producto_id);
+        if (idSet.has(pid)) conMov.add(pid);
+      }
+    };
+    pushRows((firstPage.data ?? []) as Array<{ producto_id: string }>);
+    let off = CHUNK;
+    while ((firstPage.data ?? []).length === CHUNK && off < 200_000) {
+      firstPage = await fetchMovsPage(useEstado, off);
+      if (firstPage.error) throw new Error(firstPage.error.message);
+      pushRows((firstPage.data ?? []) as Array<{ producto_id: string }>);
+      off += CHUNK;
+    }
     const sinMovIds = ids.filter((id) => !conMov.has(id));
 
     // 3) Última salida (cualquier fecha) para cada producto sin movimiento reciente.
+    //    Mismo criterio: traigo todas las SALIDAs de la empresa ordenadas DESC y
+    //    tomo la primera de cada producto en `sinMovIds`.
     const ultimaSalida = new Map<string, string>();
     if (sinMovIds.length > 0) {
-      const buildUltQ = (withEstado: boolean) => {
+      const sinMovSet = new Set(sinMovIds);
+      const fetchUltPage = async (withEstado: boolean, offset: number) => {
         let q = supabase
           .from("movimientos_inventario")
           .select("producto_id, fecha")
           .eq("empresa_id", empresaId)
           .eq("tipo", "SALIDA")
-          .in("producto_id", sinMovIds)
-          .order("fecha", { ascending: false });
+          .order("fecha", { ascending: false })
+          .range(offset, offset + CHUNK - 1);
         if (withEstado) q = q.eq("estado", "activa");
         return q;
       };
-      let ultQ = await buildUltQ(true);
-      if (ultQ.error) {
-        ultQ = await buildUltQ(false);
-        if (ultQ.error) throw new Error(ultQ.error.message);
+      let usarEst = true;
+      let pg = await fetchUltPage(true, 0);
+      if (pg.error) {
+        usarEst = false;
+        pg = await fetchUltPage(false, 0);
+        if (pg.error) throw new Error(pg.error.message);
       }
-      for (const r of (ultQ.data ?? []) as Array<{ producto_id: string; fecha: string }>) {
-        if (!ultimaSalida.has(r.producto_id)) ultimaSalida.set(r.producto_id, r.fecha);
+      const pushUlt = (rows: Array<{ producto_id: string; fecha: string }>) => {
+        for (const r of rows) {
+          const pid = String(r.producto_id);
+          if (sinMovSet.has(pid) && !ultimaSalida.has(pid)) ultimaSalida.set(pid, r.fecha);
+        }
+      };
+      pushUlt((pg.data ?? []) as Array<{ producto_id: string; fecha: string }>);
+      let uoff = CHUNK;
+      // corta cuando todos los sinMovIds ya tienen última salida o se acaban páginas
+      while ((pg.data ?? []).length === CHUNK && ultimaSalida.size < sinMovIds.length && uoff < 200_000) {
+        pg = await fetchUltPage(usarEst, uoff);
+        if (pg.error) throw new Error(pg.error.message);
+        pushUlt((pg.data ?? []) as Array<{ producto_id: string; fecha: string }>);
+        uoff += CHUNK;
       }
     }
 

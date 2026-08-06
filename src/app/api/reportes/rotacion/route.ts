@@ -56,11 +56,13 @@ export async function GET(request: NextRequest) {
     const ids = productos.map((p) => p.id);
 
     // 2) Salidas por venta agregadas en JS (PostgREST no agrupa fácil aquí).
-    //    Se excluyen movimientos anulados (SALIDAs de ventas que después
-    //    fueron anuladas) — de lo contrario el ratio queda inflado.
-    //    Fallback: si PostgREST tiene el schema cacheado sin la columna
-    //    `estado` (nueva), reintentamos sin el filtro y logueamos.
-    const buildMovQ = (withEstado: boolean) => {
+    //    NO usamos .in("producto_id", ids) porque con miles de productos la URL
+    //    supera el límite de Cloudflare/Traefik y da 520. Traemos todas las
+    //    SALIDAs de la empresa en el rango y filtramos por producto acá.
+    //    Excluye anuladas (fallback si PostgREST aún no ve la columna).
+    const idSet = new Set(ids);
+    const CHUNK = 1000;
+    const fetchPage = async (withEstado: boolean, offset: number) => {
       let q = supabase
         .from("movimientos_inventario")
         .select("producto_id, cantidad")
@@ -68,20 +70,33 @@ export async function GET(request: NextRequest) {
         .eq("tipo", "SALIDA")
         .eq("origen", "venta")
         .gte("fecha", corte)
-        .in("producto_id", ids);
+        .range(offset, offset + CHUNK - 1);
       if (withEstado) q = q.eq("estado", "activa");
       return q;
     };
-    let movQ = await buildMovQ(true);
-    if (movQ.error) {
-      console.warn("[/api/reportes/rotacion] fallback sin filtro estado:", movQ.error.message);
-      movQ = await buildMovQ(false);
-      if (movQ.error) throw new Error(movQ.error.message);
+    let usarEst = true;
+    let pg = await fetchPage(true, 0);
+    if (pg.error) {
+      console.warn("[/api/reportes/rotacion] fallback sin filtro estado:", pg.error.message);
+      usarEst = false;
+      pg = await fetchPage(false, 0);
+      if (pg.error) throw new Error(pg.error.message);
     }
     const vendidoPorProducto = new Map<string, number>();
-    for (const r of (movQ.data ?? []) as Array<{ producto_id: string; cantidad: number }>) {
-      const k = String(r.producto_id);
-      vendidoPorProducto.set(k, (vendidoPorProducto.get(k) ?? 0) + (Number(r.cantidad) || 0));
+    const acumular = (rows: Array<{ producto_id: string; cantidad: number }>) => {
+      for (const r of rows) {
+        const k = String(r.producto_id);
+        if (!idSet.has(k)) continue;
+        vendidoPorProducto.set(k, (vendidoPorProducto.get(k) ?? 0) + (Number(r.cantidad) || 0));
+      }
+    };
+    acumular((pg.data ?? []) as Array<{ producto_id: string; cantidad: number }>);
+    let off = CHUNK;
+    while ((pg.data ?? []).length === CHUNK && off < 200_000) {
+      pg = await fetchPage(usarEst, off);
+      if (pg.error) throw new Error(pg.error.message);
+      acumular((pg.data ?? []) as Array<{ producto_id: string; cantidad: number }>);
+      off += CHUNK;
     }
 
     type Banda = "alta" | "media" | "baja" | "nula";
