@@ -131,7 +131,8 @@ export async function GET(request: NextRequest) {
       successResponse({ items, count: items.length, dias, corte, valor_total_inmovilizado: valorTotal })
     );
   } catch (err) {
-    console.error("[/api/reportes/sin-movimiento]", err instanceof Error ? err.message : err);
-    return NextResponse.json(errorResponse("No se pudo cargar el reporte."), { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[/api/reportes/sin-movimiento]", msg);
+    return NextResponse.json(errorResponse(`No se pudo cargar el reporte: ${msg}`), { status: 500 });
   }
 }
