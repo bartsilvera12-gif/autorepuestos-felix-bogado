@@ -58,16 +58,26 @@ export async function GET(request: NextRequest) {
     // 2) Salidas por venta agregadas en JS (PostgREST no agrupa fácil aquí).
     //    Se excluyen movimientos anulados (SALIDAs de ventas que después
     //    fueron anuladas) — de lo contrario el ratio queda inflado.
-    const movQ = await supabase
-      .from("movimientos_inventario")
-      .select("producto_id, cantidad")
-      .eq("empresa_id", empresaId)
-      .eq("tipo", "SALIDA")
-      .eq("origen", "venta")
-      .eq("estado", "activa")
-      .gte("fecha", corte)
-      .in("producto_id", ids);
-    if (movQ.error) throw new Error(movQ.error.message);
+    //    Fallback: si PostgREST tiene el schema cacheado sin la columna
+    //    `estado` (nueva), reintentamos sin el filtro y logueamos.
+    const buildMovQ = (withEstado: boolean) => {
+      let q = supabase
+        .from("movimientos_inventario")
+        .select("producto_id, cantidad")
+        .eq("empresa_id", empresaId)
+        .eq("tipo", "SALIDA")
+        .eq("origen", "venta")
+        .gte("fecha", corte)
+        .in("producto_id", ids);
+      if (withEstado) q = q.eq("estado", "activa");
+      return q;
+    };
+    let movQ = await buildMovQ(true);
+    if (movQ.error) {
+      console.warn("[/api/reportes/rotacion] fallback sin filtro estado:", movQ.error.message);
+      movQ = await buildMovQ(false);
+      if (movQ.error) throw new Error(movQ.error.message);
+    }
     const vendidoPorProducto = new Map<string, number>();
     for (const r of (movQ.data ?? []) as Array<{ producto_id: string; cantidad: number }>) {
       const k = String(r.producto_id);

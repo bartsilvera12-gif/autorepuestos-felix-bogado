@@ -56,30 +56,46 @@ export async function GET(request: NextRequest) {
     // 2) Productos con salida en los últimos N días → exclusión.
     //    Se excluyen SALIDAs anuladas: un producto cuya única salida fue
     //    una venta después anulada debe seguir apareciendo como stock muerto.
-    const movQ = await supabase
-      .from("movimientos_inventario")
-      .select("producto_id")
-      .eq("empresa_id", empresaId)
-      .eq("tipo", "SALIDA")
-      .eq("estado", "activa")
-      .gte("fecha", corte)
-      .in("producto_id", ids);
-    if (movQ.error) throw new Error(movQ.error.message);
+    //    Fallback si PostgREST aún no ve la columna `estado`.
+    const buildMovQ = (withEstado: boolean) => {
+      let q = supabase
+        .from("movimientos_inventario")
+        .select("producto_id")
+        .eq("empresa_id", empresaId)
+        .eq("tipo", "SALIDA")
+        .gte("fecha", corte)
+        .in("producto_id", ids);
+      if (withEstado) q = q.eq("estado", "activa");
+      return q;
+    };
+    let movQ = await buildMovQ(true);
+    if (movQ.error) {
+      console.warn("[/api/reportes/sin-movimiento] fallback sin filtro estado:", movQ.error.message);
+      movQ = await buildMovQ(false);
+      if (movQ.error) throw new Error(movQ.error.message);
+    }
     const conMov = new Set((movQ.data ?? []).map((r) => String((r as { producto_id: string }).producto_id)));
     const sinMovIds = ids.filter((id) => !conMov.has(id));
 
     // 3) Última salida (cualquier fecha) para cada producto sin movimiento reciente.
     const ultimaSalida = new Map<string, string>();
     if (sinMovIds.length > 0) {
-      const ultQ = await supabase
-        .from("movimientos_inventario")
-        .select("producto_id, fecha")
-        .eq("empresa_id", empresaId)
-        .eq("tipo", "SALIDA")
-        .eq("estado", "activa")
-        .in("producto_id", sinMovIds)
-        .order("fecha", { ascending: false });
-      if (ultQ.error) throw new Error(ultQ.error.message);
+      const buildUltQ = (withEstado: boolean) => {
+        let q = supabase
+          .from("movimientos_inventario")
+          .select("producto_id, fecha")
+          .eq("empresa_id", empresaId)
+          .eq("tipo", "SALIDA")
+          .in("producto_id", sinMovIds)
+          .order("fecha", { ascending: false });
+        if (withEstado) q = q.eq("estado", "activa");
+        return q;
+      };
+      let ultQ = await buildUltQ(true);
+      if (ultQ.error) {
+        ultQ = await buildUltQ(false);
+        if (ultQ.error) throw new Error(ultQ.error.message);
+      }
       for (const r of (ultQ.data ?? []) as Array<{ producto_id: string; fecha: string }>) {
         if (!ultimaSalida.has(r.producto_id)) ultimaSalida.set(r.producto_id, r.fecha);
       }
