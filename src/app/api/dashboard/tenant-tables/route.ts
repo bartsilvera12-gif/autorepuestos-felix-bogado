@@ -239,13 +239,38 @@ export async function GET(request: NextRequest) {
       const base = supabase.from("tipificaciones").select("*").eq("empresa_id", empresaId);
       return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
     };
-    const buildVentasQ = () => {
-      const base = supabase.from("ventas").select("*").eq("empresa_id", empresaId).neq("estado", "anulada");
-      return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
+    /** PostgREST trunca a db-max-rows (~1000) ignorando .limit(). Paginamos. */
+    const CHUNK_TABLA = 1000;
+    const MAX_ROWS_TABLA = 100_000;
+    const buildVentasQ = async () => {
+      const all: unknown[] = [];
+      for (let offset = 0; offset < MAX_ROWS_TABLA; offset += CHUNK_TABLA) {
+        let q = supabase
+          .from("ventas").select("*").eq("empresa_id", empresaId).neq("estado", "anulada")
+          .range(offset, offset + CHUNK_TABLA - 1);
+        if (range) q = q.gte("fecha", range.desde).lte("fecha", range.hasta);
+        const r = await q;
+        if (r.error) return { data: null as unknown[] | null, error: r.error };
+        const batch = (r.data ?? []) as unknown[];
+        all.push(...batch);
+        if (batch.length < CHUNK_TABLA) break;
+      }
+      return { data: all, error: null as { message: string } | null };
     };
-    const buildComprasQ = () => {
-      const base = supabase.from("compras").select("*").eq("empresa_id", empresaId).neq("estado", "anulada");
-      return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
+    const buildComprasQ = async () => {
+      const all: unknown[] = [];
+      for (let offset = 0; offset < MAX_ROWS_TABLA; offset += CHUNK_TABLA) {
+        let q = supabase
+          .from("compras").select("*").eq("empresa_id", empresaId).neq("estado", "anulada")
+          .range(offset, offset + CHUNK_TABLA - 1);
+        if (range) q = q.gte("fecha", range.desde).lte("fecha", range.hasta);
+        const r = await q;
+        if (r.error) return { data: null as unknown[] | null, error: r.error };
+        const batch = (r.data ?? []) as unknown[];
+        all.push(...batch);
+        if (batch.length < CHUNK_TABLA) break;
+      }
+      return { data: all, error: null as { message: string } | null };
     };
     const buildGastosQ = () => {
       const base = supabase.from("gastos").select("id, monto, fecha").eq("empresa_id", empresaId);
@@ -359,15 +384,34 @@ export async function GET(request: NextRequest) {
       if (ventaIds.length === 0) {
         ventasItemsRows = [];
       } else {
-        const itemsRes = await supabase
-          .from("ventas_items")
-          .select("*")
-          .eq("empresa_id", empresaId)
-          .in("venta_id", ventaIds);
-        ventasItemsRows = pickRows("ventas_items", itemsRes, queryErrors);
-        if ((ventasItemsRows.length === 0 && queryErrors.ventas_items) || (usarPg && ventasItemsRows.length === 0)) {
-          ventasItemsRows = await fallbackVentasItemsPg(dataSchema, empresaId, ventaIds);
-          if (ventasItemsRows.length > 0) delete queryErrors.ventas_items;
+        // Chunkear venta_ids para no romper URL de PostgREST, y paginar cada chunk
+        // porque PostgREST corta a db-max-rows (~1000) por respuesta.
+        const IDS_CHUNK = 300; // ~300 UUIDs ≈ URL segura
+        const PAG_CHUNK = 1000;
+        const PAG_MAX = 100_000;
+        const all: unknown[] = [];
+        let hardErr: { message: string } | null = null;
+        for (let i = 0; i < ventaIds.length && !hardErr; i += IDS_CHUNK) {
+          const slice = ventaIds.slice(i, i + IDS_CHUNK);
+          for (let off = 0; off < PAG_MAX; off += PAG_CHUNK) {
+            const r = await supabase
+              .from("ventas_items").select("*").eq("empresa_id", empresaId)
+              .in("venta_id", slice)
+              .range(off, off + PAG_CHUNK - 1);
+            if (r.error) { hardErr = r.error; break; }
+            const batch = (r.data ?? []) as unknown[];
+            all.push(...batch);
+            if (batch.length < PAG_CHUNK) break;
+          }
+        }
+        if (hardErr) {
+          ventasItemsRows = pickRows("ventas_items", { data: null, error: hardErr }, queryErrors);
+          if ((ventasItemsRows.length === 0 && queryErrors.ventas_items) || (usarPg && ventasItemsRows.length === 0)) {
+            ventasItemsRows = await fallbackVentasItemsPg(dataSchema, empresaId, ventaIds);
+            if (ventasItemsRows.length > 0) delete queryErrors.ventas_items;
+          }
+        } else {
+          ventasItemsRows = all;
         }
       }
     } else {
