@@ -70,16 +70,37 @@ export async function GET(request: NextRequest) {
       .limit(500);
     if (ventasQ.error) throw new Error(ventasQ.error.message);
 
-    const itemsQ = await ctx.supabase
-      .from("ventas_items")
-      .select(
-        "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, tipo_precio, subtotal, monto_iva, total_linea"
-      )
-      .eq("empresa_id", empresaId);
-    if (itemsQ.error) throw new Error(itemsQ.error.message);
-
     const ventasRows = (ventasQ.data ?? []) as VentaRow[];
-    const itemsRows = (itemsQ.data ?? []) as VentaItemRow[];
+
+    // Traer items SOLO de las ventas que vamos a mostrar (evita traer histórico
+    // entero) y paginado en chunks porque PostgREST corta a db-max-rows (~1000).
+    // Antes: se pedían todos los items del tenant sin paginar → PostgREST
+    // devolvía solo los primeros 1000, generalmente los más viejos, y las
+    // ventas recientes aparecían con "Sin líneas cargadas".
+    const ventaIds = ventasRows.map((r) => r.id);
+    const itemsRows: VentaItemRow[] = [];
+    if (ventaIds.length > 0) {
+      const IDS_CHUNK = 300;
+      const PAG_CHUNK = 1000;
+      const PAG_MAX = 50_000;
+      for (let i = 0; i < ventaIds.length; i += IDS_CHUNK) {
+        const slice = ventaIds.slice(i, i + IDS_CHUNK);
+        for (let off = 0; off < PAG_MAX; off += PAG_CHUNK) {
+          const r = await ctx.supabase
+            .from("ventas_items")
+            .select(
+              "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, tipo_precio, subtotal, monto_iva, total_linea"
+            )
+            .eq("empresa_id", empresaId)
+            .in("venta_id", slice)
+            .range(off, off + PAG_CHUNK - 1);
+          if (r.error) throw new Error(r.error.message);
+          const batch = (r.data ?? []) as VentaItemRow[];
+          itemsRows.push(...batch);
+          if (batch.length < PAG_CHUNK) break;
+        }
+      }
+    }
 
     const byVenta = new Map<string, VentaItemRow[]>();
     for (const row of itemsRows) {

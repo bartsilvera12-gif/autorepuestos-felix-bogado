@@ -152,6 +152,9 @@ export default function VentasPage() {
   const [cargandoLista, setCargandoLista] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Detalle de venta (modal al hacer click en la fila)
+  const [detalleVenta, setDetalleVenta] = useState<Venta | null>(null);
+
   // Anulación de venta
   const [anularTarget, setAnularTarget] = useState<Venta | null>(null);
   const [anularMotivo, setAnularMotivo] = useState("");
@@ -388,7 +391,12 @@ export default function VentasPage() {
                 filtradas.map((v) => {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
-                    <tr key={v.id} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors">
+                    <tr
+                      key={v.id}
+                      className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors cursor-pointer"
+                      onClick={() => setDetalleVenta(v)}
+                      title="Click para ver detalle"
+                    >
                       <td className="py-4 pr-4 font-mono text-xs text-gray-500 align-middle">
                         {v.numero_control}
                       </td>
@@ -433,7 +441,7 @@ export default function VentasPage() {
                             Anulada
                           </span>
                         ) : (
-                          <div className="inline-flex items-center gap-1.5 flex-wrap justify-center">
+                          <div className="inline-flex items-center gap-1.5 flex-wrap justify-center" onClick={(e) => e.stopPropagation()}>
                             <a
                               href={`/api/ventas/${v.id}/ticket?mode=comandas`}
                               target="_blank"
@@ -477,6 +485,124 @@ export default function VentasPage() {
 
       {/* FAB mobile: acceso 1-tap a "+ Nueva venta" desde cualquier scroll position */}
       <MobileFab href="/ventas/nueva" label="Nueva venta" />
+
+      {detalleVenta && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setDetalleVenta(null)}
+        >
+          <div
+            className="w-full max-w-3xl max-h-[90vh] overflow-hidden rounded-xl bg-white shadow-xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Cabecera */}
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-4">
+              <div>
+                <h3 className="text-lg font-semibold text-[#4FAEB2]">{detalleVenta.numero_control}</h3>
+                <p className="text-xs text-slate-500">Detalle de la venta</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDetalleVenta(null)}
+                className="text-slate-400 hover:text-slate-700 transition-colors"
+                aria-label="Cerrar"
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+            </div>
+
+            {/* Metadatos */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 px-6 py-4 border-b border-slate-100 text-xs">
+              <div>
+                <p className="text-slate-400 uppercase tracking-wide mb-1">Fecha y hora</p>
+                <p className="text-slate-800 font-medium">{formatFecha(detalleVenta.fecha)}</p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wide mb-1">Tipo</p>
+                <p className="text-slate-800 font-medium">
+                  {detalleVenta.tipo_venta === "CONTADO"
+                    ? "Contado"
+                    : `Crédito ${detalleVenta.plazo_dias ?? ""}d`}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wide mb-1">Pago</p>
+                <p className="text-slate-800 font-medium capitalize">
+                  {detalleVenta.metodo_pago === "tarjeta" ? "Tarjeta"
+                    : detalleVenta.metodo_pago === "transferencia" ? "Transferencia"
+                    : detalleVenta.metodo_pago === "efectivo" ? "Efectivo"
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <p className="text-slate-400 uppercase tracking-wide mb-1">Estado</p>
+                <p className="text-slate-800 font-medium capitalize">
+                  {detalleVenta.estado === "anulada" ? (
+                    <span className="text-red-600">Anulada</span>
+                  ) : "Completada"}
+                </p>
+              </div>
+            </div>
+
+            {/* Tabla de ítems */}
+            <div className="flex-1 overflow-auto">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
+                  <tr>
+                    <th className="text-left px-6 py-3 font-medium">Producto</th>
+                    <th className="text-right px-4 py-3 font-medium">Cant.</th>
+                    <th className="text-right px-4 py-3 font-medium">P. Unit.</th>
+                    <th className="text-right px-4 py-3 font-medium">IVA</th>
+                    <th className="text-right px-6 py-3 font-medium">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {detalleVenta.items.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-8 text-center text-sm text-slate-400">
+                        Sin líneas cargadas
+                      </td>
+                    </tr>
+                  ) : detalleVenta.items.map((it, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="px-6 py-3">
+                        <p className="text-slate-800 font-medium">{it.producto_nombre}</p>
+                        {it.sku && <p className="text-xs text-slate-400 font-mono">{it.sku}</p>}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums">{it.cantidad}</td>
+                      <td className="px-4 py-3 text-right tabular-nums">{formatGs(it.precio_venta)}</td>
+                      <td className="px-4 py-3 text-right text-xs text-slate-500">
+                        {it.tipo_iva === "EXENTA" ? "Exenta" : `IVA ${it.tipo_iva}`}
+                      </td>
+                      <td className="px-6 py-3 text-right tabular-nums font-semibold text-slate-800">{formatGs(it.total_linea)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Totales */}
+            <div className="border-t border-slate-100 px-6 py-4 bg-slate-50/60">
+              <div className="flex justify-end">
+                <div className="w-64 space-y-1 text-sm">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Subtotal ({detalleVenta.items.length} ítem{detalleVenta.items.length === 1 ? "" : "s"}, {detalleVenta.items.reduce((s, i) => s + i.cantidad, 0)} u.)</span>
+                    <span className="tabular-nums">{formatGs(detalleVenta.subtotal)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>IVA</span>
+                    <span className="tabular-nums">{formatGs(detalleVenta.monto_iva)}</span>
+                  </div>
+                  <div className="flex justify-between pt-1 border-t border-slate-200 text-base font-bold text-slate-900">
+                    <span>Total</span>
+                    <span className="tabular-nums">{formatGs(detalleVenta.total)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {anularTarget && (
         <div
