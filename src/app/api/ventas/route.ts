@@ -83,6 +83,9 @@ export async function GET(request: NextRequest) {
       const IDS_CHUNK = 300;
       const PAG_CHUNK = 1000;
       const PAG_MAX = 50_000;
+      // Tolerante a errores por chunk: si uno falla lo logueamos y seguimos.
+      // Antes: cualquier error tumbaba el endpoint entero → la lista de ventas
+      // desaparecía. Mejor mostrar ventas con "Sin líneas" que ninguna.
       for (let i = 0; i < ventaIds.length; i += IDS_CHUNK) {
         const slice = ventaIds.slice(i, i + IDS_CHUNK);
         for (let off = 0; off < PAG_MAX; off += PAG_CHUNK) {
@@ -94,7 +97,10 @@ export async function GET(request: NextRequest) {
             .eq("empresa_id", empresaId)
             .in("venta_id", slice)
             .range(off, off + PAG_CHUNK - 1);
-          if (r.error) throw new Error(r.error.message);
+          if (r.error) {
+            console.warn(`[/api/ventas GET] items chunk ${i}/${off} error:`, r.error.message);
+            break; // saltar al próximo chunk de IDs
+          }
           const batch = (r.data ?? []) as VentaItemRow[];
           itemsRows.push(...batch);
           if (batch.length < PAG_CHUNK) break;
@@ -138,7 +144,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(successResponse({ ventas }));
   } catch (err) {
-    console.error("[/api/ventas GET]", err instanceof Error ? err.message : err);
-    return NextResponse.json(errorResponse("No se pudieron cargar las ventas."), { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[/api/ventas GET]", msg);
+    return NextResponse.json(errorResponse(`No se pudieron cargar las ventas: ${msg}`), { status: 500 });
   }
 }
