@@ -255,9 +255,10 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(successResponse({ items: hits, count: hits.length, q, vehiculo: vehiculoRaw || null }));
   } catch (err) {
-    console.error("[/api/productos/search]", err instanceof Error ? err.message : err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[/api/productos/search]", msg);
     return NextResponse.json(
-      errorResponse("No se pudo realizar la búsqueda. Intentá nuevamente."),
+      errorResponse(`No se pudo realizar la búsqueda: ${msg}`),
       { status: 500 }
     );
   }
