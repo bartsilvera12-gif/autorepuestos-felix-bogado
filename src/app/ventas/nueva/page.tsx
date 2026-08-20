@@ -145,6 +145,12 @@ export default function NuevaVentaPage() {
   // Nota de remisión: activada si el cliente la usa; toggle manual solo con cliente.
   const [generaNotaRemision, setGeneraNotaRemision] = useState(false);
 
+  // ── Descuento porcentual (sobre el total de la venta) ────────────────────
+  // Se prorratea sobre los precios de cada línea al momento de guardar, así
+  // el total de la venta refleja exactamente el descuento aplicado y los
+  // reportes / kardex quedan consistentes (no requiere columnas nuevas).
+  const [descuentoPct, setDescuentoPct] = useState(0);
+
   // ── Cobro (solo CONTADO, no se persiste — solo ayuda al cajero) ───────────
   const [montoRecibido, setMontoRecibido] = useState("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
@@ -402,7 +408,12 @@ export default function NuevaVentaPage() {
 
   const totalSubtotal = items.reduce((s, i) => s + i.subtotal, 0);
   const totalIva      = items.reduce((s, i) => s + i.monto_iva, 0);
-  const totalGeneral  = items.reduce((s, i) => s + i.total_linea, 0);
+  const totalSinDescuento = items.reduce((s, i) => s + i.total_linea, 0);
+  // Descuento porcentual sobre el total de la venta.
+  const descuentoPctClamped = Math.max(0, Math.min(100, Number(descuentoPct) || 0));
+  const descuentoMonto = Math.round(totalSinDescuento * (descuentoPctClamped / 100));
+  const totalGeneral   = Math.max(0, totalSinDescuento - descuentoMonto);
+  const factorDescuento = totalSinDescuento > 0 ? totalGeneral / totalSinDescuento : 1;
   // Condición de venta: si es Crédito, exigir plazo de al menos 1 día.
   const plazoDiasNum = parseInt(plazoDias) || 0;
   // Crédito exige cliente seleccionado Y plazo/vencimiento (≥1 día). Genera cuenta por cobrar.
@@ -564,14 +575,36 @@ export default function NuevaVentaPage() {
     isSubmittingRef.current = true;
     setGuardando(true);
     try {
+      // Si hay descuento porcentual, prorrateamos sobre cada línea (ajustando
+      // precio_venta, subtotal y total_linea) para que el total de la venta
+      // en la BD refleje exactamente el descuento aplicado sin necesidad de
+      // columnas nuevas. Los reportes y kardex quedan consistentes.
+      const itemsAEnviar = descuentoPctClamped > 0 && factorDescuento < 1
+        ? items.map((it) => {
+            const precioAjustado = Math.round((it.precio_venta || 0) * factorDescuento);
+            const subtotalAj = Math.round(precioAjustado * it.cantidad);
+            const montoIvaAj = calcIva(it.tipo_iva, subtotalAj);
+            return {
+              ...it,
+              precio_venta: precioAjustado,
+              subtotal: subtotalAj,
+              monto_iva: montoIvaAj,
+              total_linea: subtotalAj,
+            };
+          })
+        : items;
+      const subtotalEnviar = itemsAEnviar.reduce((s, i) => s + i.subtotal, 0);
+      const ivaEnviar      = itemsAEnviar.reduce((s, i) => s + i.monto_iva, 0);
+      const totalEnviar    = itemsAEnviar.reduce((s, i) => s + i.total_linea, 0);
+
       const resultado = await saveVenta(
         {
-          items,
+          items:        itemsAEnviar,
           moneda,
           tipo_cambio:  tipoCambioNum,
-          subtotal:     totalSubtotal,
-          monto_iva:    totalIva,
-          total:        totalGeneral,
+          subtotal:     subtotalEnviar,
+          monto_iva:    ivaEnviar,
+          total:        totalEnviar,
           tipo_venta:   tipoVenta,
           plazo_dias:   tipoVenta === "CREDITO" ? plazoDiasNum : undefined,
           metodo_pago:  metodoPago,
@@ -872,6 +905,54 @@ export default function NuevaVentaPage() {
                         {totalIva > 0 ? formatGs(totalIva) : "—"}
                       </span>
                     </div>
+
+                    {/* Descuento porcentual sobre el total de la venta */}
+                    <div className="pt-2 border-t border-gray-200 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                          Descuento
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={100}
+                            step={1}
+                            value={descuentoPct === 0 ? "" : descuentoPct}
+                            onChange={(e) => {
+                              const n = parseFloat(e.target.value);
+                              setDescuentoPct(Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0);
+                            }}
+                            placeholder="0"
+                            className="w-16 rounded-md border border-slate-200 px-2 py-1 text-sm text-right tabular-nums focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none"
+                          />
+                          <span className="text-sm text-gray-600">%</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        {[0, 5, 10, 15, 20, 30].map((p) => (
+                          <button
+                            key={p}
+                            type="button"
+                            onClick={() => setDescuentoPct(p)}
+                            className={`px-2 py-1 text-xs rounded-md border transition-colors ${
+                              descuentoPctClamped === p
+                                ? "border-[#0EA5E9] bg-[#0EA5E9]/10 text-[#0EA5E9] font-medium"
+                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                            }`}
+                          >
+                            {p === 0 ? "Sin desc." : `${p}%`}
+                          </button>
+                        ))}
+                      </div>
+                      {descuentoPctClamped > 0 && descuentoMonto > 0 && (
+                        <div className="flex justify-between text-sm text-emerald-700">
+                          <span>Descuento aplicado ({descuentoPctClamped}%)</span>
+                          <span className="tabular-nums font-medium">− {formatGs(descuentoMonto)}</span>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="flex justify-between text-base font-bold text-gray-900 pt-2 border-t border-gray-200">
                       <span>TOTAL</span>
                       <span className="tabular-nums">{formatGs(totalGeneral)}</span>
