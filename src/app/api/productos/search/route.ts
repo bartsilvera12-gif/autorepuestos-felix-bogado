@@ -175,18 +175,20 @@ export async function GET(request: NextRequest) {
     }
 
     // Completar con productos alfabéticos hasta llegar a `limit`, excluyendo
-    // los que ya tenemos (para no duplicar).
+    // los que ya tenemos (para no duplicar). NO usamos .not("id","in",[...])
+    // porque con muchos IDs a excluir la URL supera el límite de
+    // Cloudflare/Traefik y da 520. Traemos un poco más de filas y filtramos
+    // en JS.
     const remaining = limit - rowsAccum.length;
     if (remaining > 0) {
-      let fillQuery = query.order("nombre").limit(remaining);
-      if (rowsAccum.length > 0) {
-        const excludeIds = rowsAccum.map((r) => String(r.id));
-        // not.in.(uuid1,uuid2,...) — escape de comas no necesario para UUIDs.
-        fillQuery = fillQuery.not("id", "in", `(${excludeIds.join(",")})`);
-      }
-      const fillRes = await fillQuery;
+      const excludeSet = new Set(rowsAccum.map((r) => String(r.id)));
+      const fetchCount = remaining + excludeSet.size;
+      const fillRes = await query.order("nombre").range(0, fetchCount - 1);
       if (fillRes.error) throw new Error(fillRes.error.message);
-      rowsAccum = rowsAccum.concat((fillRes.data ?? []) as unknown as ProdRow[]);
+      const nuevos = ((fillRes.data ?? []) as unknown as ProdRow[])
+        .filter((r) => !excludeSet.has(String(r.id)))
+        .slice(0, remaining);
+      rowsAccum = rowsAccum.concat(nuevos);
     }
 
     const data = rowsAccum;
