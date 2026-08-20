@@ -153,24 +153,28 @@ export async function GET(request: NextRequest) {
     let rowsAccum: ProdRow[] = [];
 
     if (topIds.length > 0) {
-      const topQ = await supabase
-        .from("productos")
-        .select(
-          "id, nombre, sku, codigo_barras, codigo_barras_interno, " +
-            "precio_venta, precio_mayorista, precio_distribuidor, costo_promedio, stock_actual, stock_minimo, " +
-            "unidad_medida, metodo_valuacion, imagen_path, imagen_url, " +
-            "categoria_principal_id, proveedor_principal_id, ubicacion_principal_id, " +
-            "es_vendible, controla_stock, modo_receta, activo, " +
-            "codigo_oem, codigo_alternativo, marca_repuesto"
-        )
-        .eq("empresa_id", empresaId)
-        .eq("activo", true)
-        .eq("es_vendible", true)
-        .in("id", topIds);
-      if (topQ.error) throw new Error(topQ.error.message);
-      // Reordenar según topIds (que ya vienen ordenados por cantidad vendida).
+      const IDS_CHUNK = 100; // 100 UUIDs ≈ 3.7KB por URL, muy por debajo del límite
       const byId = new Map<string, ProdRow>();
-      for (const r of (topQ.data ?? []) as unknown as ProdRow[]) byId.set(String(r.id), r);
+      for (let i = 0; i < topIds.length; i += IDS_CHUNK) {
+        const slice = topIds.slice(i, i + IDS_CHUNK);
+        const topQ = await supabase
+          .from("productos")
+          .select(
+            "id, nombre, sku, codigo_barras, codigo_barras_interno, " +
+              "precio_venta, precio_mayorista, precio_distribuidor, costo_promedio, stock_actual, stock_minimo, " +
+              "unidad_medida, metodo_valuacion, imagen_path, imagen_url, " +
+              "categoria_principal_id, proveedor_principal_id, ubicacion_principal_id, " +
+              "es_vendible, controla_stock, modo_receta, activo, " +
+              "codigo_oem, codigo_alternativo, marca_repuesto"
+          )
+          .eq("empresa_id", empresaId)
+          .eq("activo", true)
+          .eq("es_vendible", true)
+          .in("id", slice);
+        if (topQ.error) throw new Error(topQ.error.message);
+        for (const r of (topQ.data ?? []) as unknown as ProdRow[]) byId.set(String(r.id), r);
+      }
+      // Reordenar según topIds (que ya vienen ordenados por cantidad vendida).
       rowsAccum = topIds.map((id) => byId.get(id)).filter(Boolean) as ProdRow[];
     }
 
