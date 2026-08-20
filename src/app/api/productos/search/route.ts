@@ -71,6 +71,15 @@ export async function GET(request: NextRequest) {
       Math.min(MAX_LIMIT, Number.isFinite(limitParam) ? limitParam : DEFAULT_LIMIT)
     );
 
+    // Sin query ni filtro de vehículo → no traemos nada. En catálogos grandes
+    // (autopartes ~6000 productos) el modo "browse" con top-sellers + fill
+    // alfabético hacía muchas requests grandes y tumbaba PostgREST (502/520).
+    // Mejor: el usuario tipea y buscamos on-demand por ILIKE que es rápido.
+    const vehiculoRawEarly = (url.searchParams.get("vehiculo") ?? "").trim();
+    if (q.length === 0 && vehiculoRawEarly.length === 0) {
+      return NextResponse.json(successResponse({ items: [], count: 0, q, vehiculo: null }));
+    }
+
     let query = supabase
       .from("productos")
       .select(
