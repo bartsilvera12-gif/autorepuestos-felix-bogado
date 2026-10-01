@@ -386,7 +386,7 @@ export async function GET(request: NextRequest) {
       } else {
         // Chunkear venta_ids para no romper URL de PostgREST, y paginar cada chunk
         // porque PostgREST corta a db-max-rows (~1000) por respuesta.
-        const IDS_CHUNK = 300; // ~300 UUIDs ≈ URL segura
+        const IDS_CHUNK = 100; // 100 UUIDs ≈ 4 KB de URL (con 300 pasaba los 8 KB del gateway: 414)
         const PAG_CHUNK = 1000;
         const PAG_MAX = 100_000;
         const all: unknown[] = [];

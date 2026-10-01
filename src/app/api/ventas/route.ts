@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
     const ventaIds = ventasRows.map((r) => r.id);
     const itemsRows: VentaItemRow[] = [];
     if (ventaIds.length > 0) {
-      const IDS_CHUNK = 300;
+      const IDS_CHUNK = 100; // con 300 la URL pasaba los 8 KB del gateway (414)
       const PAG_CHUNK = 1000;
       const PAG_MAX = 50_000;
       // Tolerante a errores por chunk: si uno falla lo logueamos y seguimos.
