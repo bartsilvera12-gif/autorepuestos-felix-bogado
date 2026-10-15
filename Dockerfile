@@ -19,7 +19,11 @@ ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPER_ADMIN_EMAILS=$NEXT_PUBLIC_SUPER_ADMIN_EMAILS
 ENV NEXT_PUBLIC_WHATSAPP_LINK_PHONE_NUMBER=$NEXT_PUBLIC_WHATSAPP_LINK_PHONE_NUMBER
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN --mount=type=cache,target=/app/.next/cache npm run build
+# Cache de build de Next con id versionado. Si una compilacion vieja queda
+# "pegada" en la cache (Turbopack sirviendo un modulo stale pese a cambiar el
+# fuente), basta con subir el sufijo del id para forzar una recompilacion
+# limpia; la cache sigue acelerando los builds siguientes.
+RUN --mount=type=cache,id=next-build-cache-v2,target=/app/.next/cache npm run build
 
 FROM node:20-slim AS runner
 WORKDIR /app
