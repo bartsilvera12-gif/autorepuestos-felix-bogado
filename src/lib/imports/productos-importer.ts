@@ -22,6 +22,12 @@ interface ProductoExistente {
   stock_minimo: number;
   unidad_medida: string;
   ubicacion_deposito: string | null;
+  // IDs de los vínculos "principal". Sin estos, el no-op detection no puede
+  // ver un cambio de SOLO proveedor/categoría/ubicación y saltea la fila,
+  // perdiendo la edición (síntoma: "le puse el proveedor y no se guardó").
+  categoria_principal_id: string | null;
+  proveedor_principal_id: string | null;
+  ubicacion_principal_id: string | null;
 }
 
 export interface ProductoParsed {
@@ -148,7 +154,8 @@ export async function buildResolverMaps(schemaRaw: string, empresaId: string): P
     pool.query<ProductoExistente>(
       `SELECT id, sku, codigo_barras, stock_actual,
               nombre, costo_promedio, precio_venta, precio_mayorista,
-              stock_minimo, unidad_medida, ubicacion_deposito
+              stock_minimo, unidad_medida, ubicacion_deposito,
+              categoria_principal_id, proveedor_principal_id, ubicacion_principal_id
          FROM ${tP} WHERE empresa_id=$1::uuid`,
       [empresaId]
     ),
@@ -170,6 +177,9 @@ export async function buildResolverMaps(schemaRaw: string, empresaId: string): P
       stock_minimo: Number(p.stock_minimo ?? 0),
       unidad_medida: p.unidad_medida ?? "",
       ubicacion_deposito: p.ubicacion_deposito ?? null,
+      categoria_principal_id: p.categoria_principal_id ?? null,
+      proveedor_principal_id: p.proveedor_principal_id ?? null,
+      ubicacion_principal_id: p.ubicacion_principal_id ?? null,
     };
     if (p.sku) productosBySku.set(p.sku.toUpperCase(), normalized);
     if (p.codigo_barras) productosByCodigo.set(p.codigo_barras.toUpperCase(), normalized);
@@ -478,7 +488,13 @@ export async function commitProductos(
               Number(existente.stock_minimo) === Number(p.stock_minimo) &&
               (existente.unidad_medida ?? "") === (p.unidad_medida ?? "") &&
               (existente.ubicacion_deposito ?? "") === (p.ubicacion_deposito ?? "") &&
-              (existente.codigo_barras ?? "") === (p.codigo_barras ?? "");
+              (existente.codigo_barras ?? "") === (p.codigo_barras ?? "") &&
+              // Vínculos "principal": comparar los IDs resueltos del Excel contra
+              // los guardados. Sin esto, cambiar SOLO el proveedor (o la categoría
+              // o la ubicación) se detecta como "sin cambios" y la fila se saltea.
+              (existente.categoria_principal_id ?? null) === (categoriaId ?? null) &&
+              (existente.proveedor_principal_id ?? null) === (proveedorId ?? null) &&
+              (existente.ubicacion_principal_id ?? null) === (ubicacionId ?? null);
             if (igual) {
               out.skipped++;
               out.skippedNoCambios++;
