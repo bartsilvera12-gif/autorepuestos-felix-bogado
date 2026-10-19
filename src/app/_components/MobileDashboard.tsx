@@ -55,7 +55,8 @@ import { enRangoCalendario } from "@/lib/fechas/calendario";
  * Touch-first: tap targets >= 48px, espaciado generoso, sin tablas.
  */
 
-type Periodo = "hoy" | "7d" | "30d" | "mes" | "anio";
+type Periodo = "hoy" | "7d" | "30d" | "mes" | "anio" | "custom";
+type RangoCustom = { desde: string; hasta: string };
 
 const PERIODO_LABELS: Record<Periodo, string> = {
   hoy: "Hoy",
@@ -63,9 +64,32 @@ const PERIODO_LABELS: Record<Periodo, string> = {
   "30d": "Últimos 30 días",
   mes: "Mes actual",
   anio: "Año",
+  custom: "Personalizado",
 };
 
-function getRangoFechas(periodo: Periodo): { desde: Date; hasta: Date } {
+/** Fecha local YYYY-MM-DD (para los <input type="date"> del rango custom). */
+function ymdLocal(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+function hoyISO(): string {
+  return ymdLocal(new Date());
+}
+function inicioMesISO(): string {
+  const d = new Date();
+  return ymdLocal(new Date(d.getFullYear(), d.getMonth(), 1));
+}
+/** Parsea YYYY-MM-DD como fecha local (sin corrimiento UTC). */
+function parseFechaLocal(s: string, endOfDay: boolean): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return null;
+  const y = Number(m[1]), mo = Number(m[2]) - 1, d = Number(m[3]);
+  return endOfDay ? new Date(y, mo, d, 23, 59, 59, 999) : new Date(y, mo, d, 0, 0, 0, 0);
+}
+
+function getRangoFechas(periodo: Periodo, custom?: RangoCustom): { desde: Date; hasta: Date } {
   const ahora = new Date();
   switch (periodo) {
     case "hoy": {
@@ -99,6 +123,15 @@ function getRangoFechas(periodo: Periodo): { desde: Date; hasta: Date } {
     case "anio": {
       const desde = new Date(ahora.getFullYear(), 0, 1);
       const hasta = new Date(ahora.getFullYear(), 11, 31, 23, 59, 59, 999);
+      return { desde, hasta };
+    }
+    case "custom": {
+      const d = custom ? parseFechaLocal(custom.desde, false) : null;
+      const h = custom ? parseFechaLocal(custom.hasta, true) : null;
+      if (d && h && d.getTime() <= h.getTime()) return { desde: d, hasta: h };
+      // Rango inválido/incompleto → fallback al mes actual.
+      const desde = new Date(ahora.getFullYear(), ahora.getMonth(), 1);
+      const hasta = new Date(ahora.getFullYear(), ahora.getMonth() + 1, 0, 23, 59, 59, 999);
       return { desde, hasta };
     }
   }
@@ -163,8 +196,9 @@ export default function MobileDashboard({
   notasCredito,
 }: Props) {
   const [periodo, setPeriodo] = useState<Periodo>("hoy");
+  const [rangoCustom, setRangoCustom] = useState<RangoCustom>(() => ({ desde: inicioMesISO(), hasta: hoyISO() }));
   const [seccion, setSeccion] = useState<Seccion>("ventas");
-  const { desde, hasta } = useMemo(() => getRangoFechas(periodo), [periodo]);
+  const { desde, hasta } = useMemo(() => getRangoFechas(periodo, rangoCustom), [periodo, rangoCustom]);
 
   // ── Cálculos memoizados ──────────────────────────────────────────────────
   const ncPorFactura = useMemo(
@@ -362,7 +396,7 @@ export default function MobileDashboard({
         </div>
         {/* Period selector — scrollable horizontal si no entran */}
         <div className="flex gap-1 overflow-x-auto -mx-1 px-1 pb-1 scrollbar-none">
-          {(["hoy", "7d", "30d", "mes", "anio"] as Periodo[]).map((p) => (
+          {(["hoy", "7d", "30d", "mes", "anio", "custom"] as Periodo[]).map((p) => (
             <button
               key={p}
               type="button"
@@ -377,6 +411,32 @@ export default function MobileDashboard({
             </button>
           ))}
         </div>
+        {/* Rango personalizado: inputs Desde/Hasta (igual que la vista de escritorio). */}
+        {periodo === "custom" && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              Desde
+              <input
+                type="date"
+                value={rangoCustom.desde}
+                max={rangoCustom.hasta}
+                onChange={(e) => setRangoCustom((r) => ({ ...r, desde: e.target.value }))}
+                className="min-h-[36px] rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+              />
+            </label>
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              Hasta
+              <input
+                type="date"
+                value={rangoCustom.hasta}
+                min={rangoCustom.desde}
+                max={hoyISO()}
+                onChange={(e) => setRangoCustom((r) => ({ ...r, hasta: e.target.value }))}
+                className="min-h-[36px] rounded-md border border-slate-200 px-2 py-1.5 text-xs"
+              />
+            </label>
+          </div>
+        )}
         {/* Selector de seccion: Ventas / Financiero / Inventario */}
         <div className="mt-2 grid grid-cols-3 gap-1 p-1 bg-slate-100 rounded-xl">
           <SectionTab active={seccion === "ventas"} onClick={() => setSeccion("ventas")} icon={ShoppingCart} label="Ventas" />
