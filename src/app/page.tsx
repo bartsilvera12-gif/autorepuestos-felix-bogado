@@ -2005,6 +2005,11 @@ export default function DashboardPage() {
   const [ventas,         setVentas]         = useState<VentaRaw[]>([]);
   const [compras,        setCompras]        = useState<CompraRaw[]>([]);
   const [gastos,         setGastos]         = useState<GastoRaw[]>([]);
+  // Estado de carga de los datos del dashboard. "error" = el fetch de
+  // tenant-tables falló (o devolvió inválido); mostramos aviso + Reintentar en
+  // vez de dibujar ceros engañosos. `reloadKey` fuerza un re-fetch al reintentar.
+  const [dataStatus, setDataStatus] = useState<"loading" | "ok" | "error">("loading");
+  const [reloadKey, setReloadKey] = useState(0);
   // Sincronizar tab con URL al cargar (popstate / refresh)
   useEffect(() => {
     const syncFromUrl = () => {
@@ -2071,36 +2076,65 @@ export default function DashboardPage() {
     const savedId = saved ? parseInt(saved, 10) : null;
     const defaultUser = us.find(u => u.nivel === "administrador") ?? us[0] ?? null;
     setUsuarioId(savedId ?? defaultUser?.id ?? null);
-
-    // Datos de módulos desde Supabase
-    getDashboardData()
-      .then((data) => {
-        setProspectos(data.prospectos);
-        setClientes(data.clientes);
-        setFacturas(data.facturas);
-        setNotasCredito(data.notas_credito ?? []);
-        setSuscripciones(data.suscripciones);
-        setPagos(data.pagos);
-        setTipificaciones(data.tipificaciones);
-        setProductos(data.productos);
-        setVentas(data.ventas);
-        setCompras(data.compras);
-        setGastos(data.gastos);
-      })
-      .catch(() => {
-        setProspectos([]);
-        setClientes([]);
-        setFacturas([]);
-        setNotasCredito([]);
-        setSuscripciones([]);
-        setPagos([]);
-        setTipificaciones([]);
-        setProductos([]);
-        setVentas([]);
-        setCompras([]);
-        setGastos([]);
-      });
   }, []);
+
+  // Carga de datos con reintento automático. ANTES: un solo intento y, si
+  // fallaba, se dibujaban ceros en silencio (el usuario creía que no tenía
+  // ventas/ganancias). AHORA: hasta 3 intentos con backoff y, si igual falla,
+  // dataStatus="error" para mostrar aviso + botón Reintentar. Se re-ejecuta al
+  // tocar Reintentar (reloadKey).
+  useEffect(() => {
+    let cancelled = false;
+    setDataStatus("loading");
+
+    const aplicar = (data: Awaited<ReturnType<typeof getDashboardData>>) => {
+      setProspectos(data.prospectos);
+      setClientes(data.clientes);
+      setFacturas(data.facturas);
+      setNotasCredito(data.notas_credito ?? []);
+      setSuscripciones(data.suscripciones);
+      setPagos(data.pagos);
+      setTipificaciones(data.tipificaciones);
+      setProductos(data.productos);
+      setVentas(data.ventas);
+      setCompras(data.compras);
+      setGastos(data.gastos);
+    };
+
+    (async () => {
+      const MAX_INTENTOS = 3;
+      for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
+        try {
+          const data = await getDashboardData();
+          if (cancelled) return;
+          // getDashboardData NO tira error cuando tenant-tables falla: devuelve
+          // vacío + tenant_tables_ok=false. Tratamos ese caso como fallo para
+          // reintentar, en lugar de aceptar ceros falsos.
+          if (!data.tenant_tables_ok && intento < MAX_INTENTOS) {
+            await new Promise((r) => setTimeout(r, 1200 * intento));
+            continue;
+          }
+          aplicar(data);
+          setDataStatus(data.tenant_tables_ok ? "ok" : "error");
+          return;
+        } catch {
+          if (cancelled) return;
+          if (intento < MAX_INTENTOS) {
+            await new Promise((r) => setTimeout(r, 1200 * intento));
+            continue;
+          }
+          setDataStatus("error");
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  /** Reintentar la carga de datos (botón del aviso de error). */
+  const recargarDashboard = () => setReloadKey((k) => k + 1);
 
   function handleUsuarioChange(id: number) {
     setUsuarioId(id);
@@ -2208,6 +2242,50 @@ export default function DashboardPage() {
 
   return (
     <>
+      {/* Aviso de estado de carga (mobile + escritorio). Reemplaza el viejo
+          comportamiento de mostrar ceros en silencio: mientras carga avisa
+          "Actualizando…", y si falla muestra el error con botón Reintentar. */}
+      {dataStatus === "loading" && (
+        <div className="mb-3 px-4 sm:px-0">
+          <div
+            className="flex items-center gap-3 rounded-2xl border px-4 py-2.5 text-xs"
+            style={{ backgroundColor: Z.surface, borderColor: "rgba(255,255,255,0.12)", color: Z.muted }}
+            role="status"
+          >
+            <span
+              aria-hidden
+              className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+            />
+            Actualizando datos del dashboard…
+          </div>
+        </div>
+      )}
+      {dataStatus === "error" && (
+        <div className="mb-3 px-4 sm:px-0">
+          <div
+            className="flex flex-wrap items-center gap-3 rounded-2xl border px-4 py-3 text-sm"
+            style={{ backgroundColor: "rgba(239,68,68,0.08)", borderColor: "rgba(239,68,68,0.35)", color: Z.text }}
+            role="alert"
+          >
+            <span aria-hidden className="text-lg">⚠️</span>
+            <div className="min-w-[200px] flex-1">
+              <p className="font-semibold">No se pudieron cargar los datos del dashboard.</p>
+              <p className="text-xs" style={{ color: Z.muted }}>
+                Los montos pueden verse en cero por esta falla, no porque no haya datos. Probá de nuevo.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={recargarDashboard}
+              className="rounded-lg px-4 py-2 text-xs font-semibold transition-colors"
+              style={{ backgroundColor: Z.accent, color: Z.text }}
+            >
+              Reintentar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MOBILE (< md=768px): dashboard rediseñado especialmente para mobile.
           Touch-first, KPIs apilados, acciones rápidas grandes, alertas, cards
           en vez de tablas. Layout COMPLETAMENTE distinto al desktop. */}

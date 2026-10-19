@@ -183,6 +183,14 @@ export interface DashboardData {
   monto_perdido_bajas_mes: number;
   /** NC aprobadas por factura (para netear valor en cartera comercial). */
   notas_credito: NotaCreditoDashRow[];
+  /**
+   * Señal de salud de la carga de tablas del tenant (facturas/ventas/etc.).
+   * false = el fetch a /api/dashboard/tenant-tables falló o devolvió algo
+   * inválido, así que clientes/facturas/ventas/... vinieron vacíos por una
+   * FALLA (no porque realmente no haya datos). La UI lo usa para mostrar
+   * "no se pudo cargar — reintentar" en vez de dibujar ceros engañosos.
+   */
+  tenant_tables_ok: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -268,6 +276,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   let clientesBajaMes = 0;
   let montoPerdidoBajasMes = 0;
   let notasCredito: NotaCreditoDashRow[] = [];
+  // Arranca en false: solo pasa a true cuando el fetch de tenant-tables
+  // responde OK y se parsea bien. Si falla (red, !ok, success=false), queda
+  // false y la UI sabe que los vacíos son por error, no por falta de datos.
+  let tenantTablesOk = false;
 
   // En SSR no podemos hacer fetchWithSupabaseSession (necesita session de localStorage),
   // ASI QUE TAMPOCO TIENE SENTIDO llamar a fetchProspectos. Antes se llamaba
@@ -287,6 +299,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       clientes_baja_mes: clientesBajaMes,
       monto_perdido_bajas_mes: montoPerdidoBajasMes,
       notas_credito: notasCredito,
+      tenant_tables_ok: false, // SSR: el cliente re-consulta; acá no evaluamos salud.
     };
   }
 
@@ -500,6 +513,9 @@ export async function getDashboardData(): Promise<DashboardData> {
       monto: toNum(r.monto),
       estado_erp: String(r.estado_erp ?? ""),
     }));
+
+    // Llegamos hasta acá sin throw → el fetch respondió OK y se parseó bien.
+    tenantTablesOk = true;
   } catch (err) {
     console.warn("[dashboard] Error cargando tablas empresa (clientes, facturas, etc.):", err);
     // prospectos ya cargados; clientes, facturas, etc. quedan vacíos
@@ -519,5 +535,6 @@ export async function getDashboardData(): Promise<DashboardData> {
     clientes_baja_mes: clientesBajaMes,
     monto_perdido_bajas_mes: montoPerdidoBajasMes,
     notas_credito: notasCredito,
+    tenant_tables_ok: tenantTablesOk,
   };
 }
